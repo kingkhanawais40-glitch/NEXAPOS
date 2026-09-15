@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+
+Disallow: /dashboard
+Disallow: /pos
+Disallow: /products
+Disallow: /customers
+Disallow: /suppliers
+Disallow: /purchases
+Disallow: /expenses
+Disallow: /reports
+Disallow: /returns
+Disallow: /employees
+Disallow: /users
+Disallow: /settings
+Disallow: /daily-closing
+
