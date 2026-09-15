@@ -13,7 +13,7 @@ router.get(
     "/customer/:customerId",
     authMiddleware,
     roleMiddleware("admin", "manager", "cashier"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const customerId = Number(req.params.customerId);
 
@@ -24,11 +24,16 @@ router.get(
                 });
             }
 
-            const customer = db.prepare(`
-                SELECT *
-                FROM customers
-                WHERE id = ?
-            `).get(customerId);
+            const customerResult = await db.execute({
+                sql: `
+                    SELECT *
+                    FROM customers
+                    WHERE id = ?
+                `,
+                args: [customerId]
+            });
+
+            const customer = customerResult.rows[0];
 
             if (!customer) {
                 return res.status(404).json({
@@ -37,44 +42,52 @@ router.get(
                 });
             }
 
-            const transactions = db.prepare(`
-                SELECT
-                    customer_ledger.*,
-                    invoices.invoice_number
-                FROM customer_ledger
-                LEFT JOIN invoices
-                    ON customer_ledger.invoice_id = invoices.id
-                WHERE customer_ledger.customer_id = ?
-                ORDER BY customer_ledger.id DESC
-            `).all(customerId);
+            const transactionsResult = await db.execute({
+                sql: `
+                    SELECT
+                        customer_ledger.*,
+                        invoices.invoice_number
+                    FROM customer_ledger
+                    LEFT JOIN invoices
+                        ON customer_ledger.invoice_id = invoices.id
+                    WHERE customer_ledger.customer_id = ?
+                    ORDER BY customer_ledger.id DESC
+                `,
+                args: [customerId]
+            });
 
-            const summary = db.prepare(`
-                SELECT
-                    COALESCE(
-                        SUM(
-                            CASE
-                                WHEN transaction_type = 'debit'
-                                THEN amount
-                                ELSE 0
-                            END
-                        ),
-                        0
-                    ) AS total_debit,
+            const summaryResult = await db.execute({
+                sql: `
+                    SELECT
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN transaction_type = 'debit'
+                                    THEN amount
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS total_debit,
 
-                    COALESCE(
-                        SUM(
-                            CASE
-                                WHEN transaction_type = 'credit'
-                                THEN amount
-                                ELSE 0
-                            END
-                        ),
-                        0
-                    ) AS total_credit
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN transaction_type = 'credit'
+                                    THEN amount
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS total_credit
 
-                FROM customer_ledger
-                WHERE customer_id = ?
-            `).get(customerId);
+                    FROM customer_ledger
+                    WHERE customer_id = ?
+                `,
+                args: [customerId]
+            });
+
+            const summary = summaryResult.rows[0];
 
             const openingBalance = Number(
                 customer.opening_balance || 0
@@ -103,7 +116,7 @@ router.get(
                         total_credit: totalCredit,
                         current_due: currentDue
                     },
-                    transactions
+                    transactions: transactionsResult.rows
                 }
             });
 
@@ -128,7 +141,7 @@ router.post(
     "/payment",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 customer_id,
@@ -192,11 +205,16 @@ router.post(
             // ---------------------------------------------
             // FIND CUSTOMER
             // ---------------------------------------------
-            const customer = db.prepare(`
-                SELECT *
-                FROM customers
-                WHERE id = ?
-            `).get(customerId);
+            const customerResult = await db.execute({
+                sql: `
+                    SELECT *
+                    FROM customers
+                    WHERE id = ?
+                `,
+                args: [customerId]
+            });
+
+            const customer = customerResult.rows[0];
 
             if (!customer) {
                 return res.status(404).json({
@@ -208,33 +226,38 @@ router.post(
             // ---------------------------------------------
             // GET CUSTOMER LEDGER SUMMARY
             // ---------------------------------------------
-            const summary = db.prepare(`
-                SELECT
-                    COALESCE(
-                        SUM(
-                            CASE
-                                WHEN transaction_type = 'debit'
-                                THEN amount
-                                ELSE 0
-                            END
-                        ),
-                        0
-                    ) AS total_debit,
+            const summaryResult = await db.execute({
+                sql: `
+                    SELECT
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN transaction_type = 'debit'
+                                    THEN amount
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS total_debit,
 
-                    COALESCE(
-                        SUM(
-                            CASE
-                                WHEN transaction_type = 'credit'
-                                THEN amount
-                                ELSE 0
-                            END
-                        ),
-                        0
-                    ) AS total_credit
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN transaction_type = 'credit'
+                                    THEN amount
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS total_credit
 
-                FROM customer_ledger
-                WHERE customer_id = ?
-            `).get(customerId);
+                    FROM customer_ledger
+                    WHERE customer_id = ?
+                `,
+                args: [customerId]
+            });
+
+            const summary = summaryResult.rows[0];
 
             const openingBalance = Number(
                 customer.opening_balance || 0
@@ -285,22 +308,25 @@ router.post(
             // INSERT PAYMENT
             // CREDIT = CUSTOMER PAID MONEY
             // ---------------------------------------------
-            db.prepare(`
-                INSERT INTO customer_ledger (
-                    customer_id,
-                    invoice_id,
-                    transaction_type,
-                    amount,
-                    payment_method,
-                    description
-                )
-                VALUES (?, NULL, 'credit', ?, ?, ?)
-            `).run(
-                customerId,
-                paymentAmount,
-                normalizedPaymentMethod,
-                paymentDescription || "Customer payment"
-            );
+            await db.execute({
+                sql: `
+                    INSERT INTO customer_ledger (
+                        customer_id,
+                        invoice_id,
+                        transaction_type,
+                        amount,
+                        payment_method,
+                        description
+                    )
+                    VALUES (?, NULL, 'credit', ?, ?, ?)
+                `,
+                args: [
+                    customerId,
+                    paymentAmount,
+                    normalizedPaymentMethod,
+                    paymentDescription || "Customer payment"
+                ]
+            });
 
             res.status(201).json({
                 success: true,
@@ -308,7 +334,10 @@ router.post(
             });
 
         } catch (error) {
-            console.error("Add customer payment error:", error);
+            console.error(
+                "Add customer payment error:",
+                error
+            );
 
             res.status(500).json({
                 success: false,

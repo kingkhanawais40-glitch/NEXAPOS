@@ -5,7 +5,6 @@ const db = require("../database/db");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
-
 // =====================================================
 // GET SUPPLIER LEDGER
 // ADMIN + MANAGER
@@ -15,13 +14,19 @@ router.get(
     "/supplier/:supplierId",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const supplier = db.prepare(`
-                SELECT *
-                FROM suppliers
-                WHERE id = ?
-            `).get(req.params.supplierId);
+            const supplierResult = await db.execute({
+                sql: `
+                    SELECT *
+                    FROM suppliers
+                    WHERE id = ?
+                `,
+                args: [req.params.supplierId]
+            });
+
+            const supplier =
+                supplierResult.rows[0] || null;
 
             if (!supplier) {
                 return res.status(404).json({
@@ -30,48 +35,60 @@ router.get(
                 });
             }
 
-            const transactions = db.prepare(`
-                SELECT
-                    supplier_ledger.*,
-                    purchases.invoice_number
-                FROM supplier_ledger
+            const transactionsResult = await db.execute({
+                sql: `
+                    SELECT
+                        supplier_ledger.*,
+                        purchases.invoice_number
+                    FROM supplier_ledger
 
-                LEFT JOIN purchases
-                    ON supplier_ledger.purchase_id = purchases.id
+                    LEFT JOIN purchases
+                        ON supplier_ledger.purchase_id = purchases.id
 
-                WHERE supplier_ledger.supplier_id = ?
+                    WHERE supplier_ledger.supplier_id = ?
 
-                ORDER BY supplier_ledger.id DESC
-            `).all(req.params.supplierId);
+                    ORDER BY supplier_ledger.id DESC
+                `,
+                args: [req.params.supplierId]
+            });
 
-            const summary = db.prepare(`
-                SELECT
-                    COALESCE(
-                        SUM(
-                            CASE
-                                WHEN transaction_type = 'debit'
-                                THEN amount
-                                ELSE 0
-                            END
-                        ),
-                        0
-                    ) AS total_debit,
+            const transactions =
+                transactionsResult.rows;
 
-                    COALESCE(
-                        SUM(
-                            CASE
-                                WHEN transaction_type = 'credit'
-                                THEN amount
-                                ELSE 0
-                            END
-                        ),
-                        0
-                    ) AS total_credit
+            const summaryResult = await db.execute({
+                sql: `
+                    SELECT
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN transaction_type = 'debit'
+                                    THEN amount
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS total_debit,
 
-                FROM supplier_ledger
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN transaction_type = 'credit'
+                                    THEN amount
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS total_credit
 
-                WHERE supplier_id = ?
-            `).get(req.params.supplierId);
+                    FROM supplier_ledger
+
+                    WHERE supplier_id = ?
+                `,
+                args: [req.params.supplierId]
+            });
+
+            const summary =
+                summaryResult.rows[0] || {};
 
             const openingBalance =
                 Number(supplier.opening_balance || 0);
@@ -98,7 +115,10 @@ router.get(
             });
 
         } catch (error) {
-            console.error("Get Supplier Ledger Error:", error);
+            console.error(
+                "Get Supplier Ledger Error:",
+                error
+            );
 
             res.status(500).json({
                 success: false,
@@ -107,7 +127,6 @@ router.get(
         }
     }
 );
-
 
 // =====================================================
 // RECORD SUPPLIER PAYMENT
@@ -118,7 +137,7 @@ router.post(
     "/payment",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 supplier_id,
@@ -165,11 +184,17 @@ router.post(
                 });
             }
 
-            const supplier = db.prepare(`
-                SELECT *
-                FROM suppliers
-                WHERE id = ?
-            `).get(supplier_id);
+            const supplierResult = await db.execute({
+                sql: `
+                    SELECT *
+                    FROM suppliers
+                    WHERE id = ?
+                `,
+                args: [supplier_id]
+            });
+
+            const supplier =
+                supplierResult.rows[0] || null;
 
             if (!supplier) {
                 return res.status(404).json({
@@ -178,47 +203,52 @@ router.post(
                 });
             }
 
-
             // =================================================
             // CALCULATE CURRENT PAYABLE
             // =================================================
 
-            const summary = db.prepare(`
-                SELECT
-                    COALESCE(
-                        SUM(
-                            CASE
-                                WHEN transaction_type = 'debit'
-                                THEN amount
-                                ELSE 0
-                            END
-                        ),
-                        0
-                    ) AS total_debit,
+            const summaryResult = await db.execute({
+                sql: `
+                    SELECT
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN transaction_type = 'debit'
+                                    THEN amount
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS total_debit,
 
-                    COALESCE(
-                        SUM(
-                            CASE
-                                WHEN transaction_type = 'credit'
-                                THEN amount
-                                ELSE 0
-                            END
-                        ),
-                        0
-                    ) AS total_credit
+                        COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN transaction_type = 'credit'
+                                    THEN amount
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS total_credit
 
-                FROM supplier_ledger
+                    FROM supplier_ledger
 
-                WHERE supplier_id = ?
-            `).get(supplier_id);
+                    WHERE supplier_id = ?
+                `,
+                args: [supplier_id]
+            });
+
+            const summary =
+                summaryResult.rows[0] || {};
 
             const currentPayable =
                 Number(supplier.opening_balance || 0) +
                 Number(summary.total_debit || 0) -
                 Number(summary.total_credit || 0);
 
-            const paymentAmount = Number(amount);
-
+            const paymentAmount =
+                Number(amount);
 
             // =================================================
             // PREVENT OVERPAYMENT
@@ -231,29 +261,30 @@ router.post(
                 });
             }
 
-
             // =================================================
             // RECORD PAYMENT
             // CREDIT = SUPPLIER PAYMENT
             // =================================================
 
-            db.prepare(`
-                INSERT INTO supplier_ledger (
+            await db.execute({
+                sql: `
+                    INSERT INTO supplier_ledger (
+                        supplier_id,
+                        purchase_id,
+                        transaction_type,
+                        amount,
+                        payment_method,
+                        description
+                    )
+                    VALUES (?, NULL, 'credit', ?, ?, ?)
+                `,
+                args: [
                     supplier_id,
-                    purchase_id,
-                    transaction_type,
-                    amount,
-                    payment_method,
-                    description
-                )
-                VALUES (?, NULL, 'credit', ?, ?, ?)
-            `).run(
-                supplier_id,
-                paymentAmount,
-                selectedPaymentMethod,
-                description || "Supplier payment"
-            );
-
+                    paymentAmount,
+                    selectedPaymentMethod,
+                    description || "Supplier payment"
+                ]
+            });
 
             // =================================================
             // CALCULATE NEW PAYABLE
@@ -261,7 +292,6 @@ router.post(
 
             const newPayable =
                 currentPayable - paymentAmount;
-
 
             res.status(201).json({
                 success: true,
@@ -277,7 +307,10 @@ router.post(
             });
 
         } catch (error) {
-            console.error("Supplier Payment Error:", error);
+            console.error(
+                "Supplier Payment Error:",
+                error
+            );
 
             res.status(500).json({
                 success: false,
@@ -286,7 +319,6 @@ router.post(
         }
     }
 );
-
 
 // =====================================================
 // EXPORT ROUTER

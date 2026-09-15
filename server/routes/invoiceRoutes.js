@@ -13,10 +13,9 @@ router.post(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager", "cashier"),
-    (req, res) => {
+    async(req, res) => {
 
-        const transaction = db.transaction(() => {
-
+        try {
             const {
                 customer_id,
                 discount = 0,
@@ -80,11 +79,17 @@ router.post(
                     );
                 }
 
-                const customer = db.prepare(`
-                    SELECT id
-                    FROM customers
-                    WHERE id = ?
-                `).get(customerId);
+                const customerResult = await db.execute({
+                    sql: `
+                        SELECT id
+                        FROM customers
+                        WHERE id = ?
+                    `,
+                    args: [customerId]
+                });
+
+                const customer =
+                    customerResult.rows[0];
 
                 if (!customer) {
                     throw new Error(
@@ -94,19 +99,41 @@ router.post(
             }
 
             // ==========================================
-            // GET PRODUCTS
+            // GET DEFAULT TAX
             // ==========================================
-            const getProduct = db.prepare(`
-                SELECT *
-                FROM products
-                WHERE id = ?
-            `);
+            const settingsResult = await db.execute({
+                sql: `
+                    SELECT default_tax
+                    FROM settings
+                    WHERE id = 1
+                `,
+                args: []
+            });
 
+            const settings =
+                settingsResult.rows[0];
+
+            const taxRate = Number(
+                settings ?
+                settings.default_tax :
+                0
+            );
+
+            if (!Number.isFinite(taxRate) ||
+                taxRate < 0
+            ) {
+                throw new Error(
+                    "Invalid tax rate"
+                );
+            }
+
+            // ==========================================
+            // VALIDATE PRODUCTS + CALCULATE SUBTOTAL
+            // ==========================================
             let subtotal = 0;
 
-            // ==========================================
-            // VALIDATE PRODUCTS
-            // ==========================================
+            const validatedItems = [];
+
             for (const item of items) {
 
                 const productId =
@@ -131,8 +158,18 @@ router.post(
                     );
                 }
 
+                const productResult =
+                    await db.execute({
+                        sql: `
+                            SELECT *
+                            FROM products
+                            WHERE id = ?
+                        `,
+                        args: [productId]
+                    });
+
                 const product =
-                    getProduct.get(productId);
+                    productResult.rows[0];
 
                 if (!product) {
                     throw new Error(
@@ -162,6 +199,13 @@ router.post(
 
                 subtotal +=
                     salePrice * quantity;
+
+                validatedItems.push({
+                    product,
+                    productId,
+                    quantity,
+                    salePrice
+                });
             }
 
             // ==========================================
@@ -181,29 +225,6 @@ router.post(
             if (finalDiscount > subtotal) {
                 throw new Error(
                     "Discount cannot be greater than subtotal"
-                );
-            }
-
-            // ==========================================
-            // GET DEFAULT TAX
-            // ==========================================
-            const settings = db.prepare(`
-                SELECT default_tax
-                FROM settings
-                WHERE id = 1
-            `).get();
-
-            const taxRate = Number(
-                settings ?
-                settings.default_tax :
-                0
-            );
-
-            if (!Number.isFinite(taxRate) ||
-                taxRate < 0
-            ) {
-                throw new Error(
-                    "Invalid tax rate"
                 );
             }
 
@@ -265,40 +286,49 @@ router.post(
                     Math.random() * 1000
                 )}`;
 
+            const cashierUsername =
+                req.user ?
+                req.user.username || null :
+                null;
+
             // ==========================================
             // CREATE INVOICE
             // ==========================================
-            const invoiceResult = db.prepare(`
-                INSERT INTO invoices (
-                    invoice_number,
-                    customer_id,
-                    subtotal,
-                    discount,
-                    tax_rate,
-                    tax_amount,
-                    grand_total,
-                    paid_amount,
-                    due_amount,
-                    payment_method,
-                    cashier_username
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-                invoiceNumber,
-                customerId,
-                subtotal,
-                finalDiscount,
-                taxRate,
-                taxAmount,
-                grandTotal,
-                paid,
-                dueAmount,
-                normalizedPaymentMethod,
-                req.user ? req.user.username || null : null
-            );
+            const invoiceResult =
+                await db.execute({
+                    sql: `
+                        INSERT INTO invoices (
+                            invoice_number,
+                            customer_id,
+                            subtotal,
+                            discount,
+                            tax_rate,
+                            tax_amount,
+                            grand_total,
+                            paid_amount,
+                            due_amount,
+                            payment_method,
+                            cashier_username
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `,
+                    args: [
+                        invoiceNumber,
+                        customerId,
+                        subtotal,
+                        finalDiscount,
+                        taxRate,
+                        taxAmount,
+                        grandTotal,
+                        paid,
+                        dueAmount,
+                        normalizedPaymentMethod,
+                        cashierUsername
+                    ]
+                });
 
             const invoiceId =
-                invoiceResult.lastInsertRowid;
+                Number(invoiceResult.lastInsertRowid);
 
             // ==========================================
             // CUSTOMER LEDGER
@@ -307,136 +337,133 @@ router.post(
                 customerId &&
                 dueAmount > 0
             ) {
-                db.prepare(`
-                    INSERT INTO customer_ledger (
-                        customer_id,
-                        invoice_id,
-                        transaction_type,
-                        amount,
-                        description
-                    )
-                    VALUES (?, ?, 'debit', ?, ?)
-                `).run(
-                    customerId,
-                    invoiceId,
-                    dueAmount,
-                    `Credit sale - ${invoiceNumber}`
-                );
+                await db.execute({
+                    sql: `
+                        INSERT INTO customer_ledger (
+                            customer_id,
+                            invoice_id,
+                            transaction_type,
+                            amount,
+                            description
+                        )
+                        VALUES (?, ?, 'debit', ?, ?)
+                    `,
+                    args: [
+                        customerId,
+                        invoiceId,
+                        dueAmount,
+                        `Credit sale - ${invoiceNumber}`
+                    ]
+                });
             }
 
             // ==========================================
-            // INSERT INVOICE ITEM
+            // PROCESS INVOICE ITEMS
             // ==========================================
-            const insertItem = db.prepare(`
-                INSERT INTO invoice_items (
-                    invoice_id,
-                    product_id,
+            for (const item of validatedItems) {
+
+                const {
+                    productId,
                     quantity,
-                    unit_price,
-                    discount,
-                    total
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-            `);
-
-            // ==========================================
-            // REDUCE STOCK
-            // ==========================================
-            const updateStock = db.prepare(`
-                UPDATE products
-                SET stock = stock - ?
-                WHERE id = ?
-            `);
-
-            // ==========================================
-            // STOCK MOVEMENT
-            // ==========================================
-            const insertStockMovement = db.prepare(`
-                INSERT INTO stock_movements (
-                    product_id,
-                    type,
-                    quantity,
-                    reference_id,
-                    reason
-                )
-                VALUES (?, 'sale', ?, ?, ?)
-            `);
-
-            // ==========================================
-            // PROCESS ITEMS
-            // ==========================================
-            for (const item of items) {
-
-                const product =
-                    getProduct.get(
-                        Number(item.product_id)
-                    );
-
-                const quantity =
-                    Number(item.quantity);
-
-                const salePrice =
-                    Number(product.sale_price);
+                    salePrice,
+                    product
+                } = item;
 
                 const total =
                     salePrice * quantity;
 
-                // Invoice item
-                insertItem.run(
-                    invoiceId,
-                    product.id,
-                    quantity,
-                    salePrice,
-                    0,
-                    total
-                );
+                // ==========================================
+                // INSERT INVOICE ITEM
+                // ==========================================
+                await db.execute({
+                    sql: `
+                        INSERT INTO invoice_items (
+                            invoice_id,
+                            product_id,
+                            quantity,
+                            unit_price,
+                            discount,
+                            total
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    `,
+                    args: [
+                        invoiceId,
+                        productId,
+                        quantity,
+                        salePrice,
+                        0,
+                        total
+                    ]
+                });
 
-                // Reduce stock
-                updateStock.run(
-                    quantity,
-                    product.id
-                );
+                // ==========================================
+                // REDUCE STOCK
+                // ==========================================
+                const stockResult =
+                    await db.execute({
+                        sql: `
+                            UPDATE products
+                            SET stock = stock - ?
+                            WHERE id = ?
+                        `,
+                        args: [
+                            quantity,
+                            productId
+                        ]
+                    });
 
-                // Stock movement
-                insertStockMovement.run(
-                    product.id,
-                    quantity,
-                    invoiceId,
-                    `Sale - ${invoiceNumber}`
-                );
+                if (
+                    Number(stockResult.rowsAffected) === 0
+                ) {
+                    throw new Error(
+                        `Failed to update stock for ${product.name}`
+                    );
+                }
+
+                // ==========================================
+                // STOCK MOVEMENT
+                // ==========================================
+                await db.execute({
+                    sql: `
+                        INSERT INTO stock_movements (
+                            product_id,
+                            type,
+                            quantity,
+                            reference_id,
+                            reason
+                        )
+                        VALUES (?, 'sale', ?, ?, ?)
+                    `,
+                    args: [
+                        productId,
+                        quantity,
+                        invoiceId,
+                        `Sale - ${invoiceNumber}`
+                    ]
+                });
             }
 
             // ==========================================
             // RETURN INVOICE DATA
             // ==========================================
-            return {
-                invoiceId,
-                invoiceNumber,
-                subtotal,
-                discount: finalDiscount,
-                taxableAmount,
-                taxRate,
-                taxAmount,
-                grandTotal,
-                paidAmount: paid,
-                dueAmount,
-                paymentMethod: normalizedPaymentMethod,
-                cashierUsername: req.user ? req.user.username || null : null
-            };
-        });
-
-        // ==========================================
-        // EXECUTE TRANSACTION
-        // ==========================================
-        try {
-
-            const invoice =
-                transaction();
-
             res.status(201).json({
                 success: true,
                 message: "Invoice created successfully",
-                data: invoice
+                data: {
+                    invoiceId,
+                    invoiceNumber,
+                    subtotal,
+                    discount: finalDiscount,
+                    taxableAmount,
+                    taxRate,
+                    taxAmount,
+                    grandTotal,
+                    paidAmount: paid,
+                    dueAmount,
+                    paymentMethod: normalizedPaymentMethod,
+                    cashierUsername
+                }
             });
 
         } catch (error) {
@@ -462,23 +489,26 @@ router.get(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager", "cashier"),
-    (req, res) => {
+    async(req, res) => {
 
         try {
 
-            const invoices = db.prepare(`
-                SELECT
-                    invoices.*,
-                    customers.name AS customer_name
-                FROM invoices
-                LEFT JOIN customers
-                    ON invoices.customer_id = customers.id
-                ORDER BY invoices.id DESC
-            `).all();
+            const result = await db.execute({
+                sql: `
+                    SELECT
+                        invoices.*,
+                        customers.name AS customer_name
+                    FROM invoices
+                    LEFT JOIN customers
+                        ON invoices.customer_id = customers.id
+                    ORDER BY invoices.id DESC
+                `,
+                args: []
+            });
 
             res.json({
                 success: true,
-                data: invoices
+                data: result.rows
             });
 
         } catch (error) {
@@ -504,7 +534,7 @@ router.get(
     "/:id",
     authMiddleware,
     roleMiddleware("admin", "manager", "cashier"),
-    (req, res) => {
+    async(req, res) => {
 
         try {
 
@@ -520,17 +550,24 @@ router.get(
                 });
             }
 
-            const invoice = db.prepare(`
-                SELECT
-                    invoices.*,
-                    customers.name AS customer_name,
-                    customers.phone AS customer_phone,
-                    customers.address AS customer_address
-                FROM invoices
-                LEFT JOIN customers
-                    ON invoices.customer_id = customers.id
-                WHERE invoices.id = ?
-            `).get(invoiceId);
+            const invoiceResult =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            invoices.*,
+                            customers.name AS customer_name,
+                            customers.phone AS customer_phone,
+                            customers.address AS customer_address
+                        FROM invoices
+                        LEFT JOIN customers
+                            ON invoices.customer_id = customers.id
+                        WHERE invoices.id = ?
+                    `,
+                    args: [invoiceId]
+                });
+
+            const invoice =
+                invoiceResult.rows[0];
 
             if (!invoice) {
                 return res.status(404).json({
@@ -539,24 +576,28 @@ router.get(
                 });
             }
 
-            const items = db.prepare(`
-                SELECT
-                    invoice_items.*,
-                    products.name AS product_name,
-                    products.barcode,
-                    products.unit
-                FROM invoice_items
-                INNER JOIN products
-                    ON invoice_items.product_id = products.id
-                WHERE invoice_items.invoice_id = ?
-                ORDER BY invoice_items.id ASC
-            `).all(invoiceId);
+            const itemsResult =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            invoice_items.*,
+                            products.name AS product_name,
+                            products.barcode,
+                            products.unit
+                        FROM invoice_items
+                        INNER JOIN products
+                            ON invoice_items.product_id = products.id
+                        WHERE invoice_items.invoice_id = ?
+                        ORDER BY invoice_items.id ASC
+                    `,
+                    args: [invoiceId]
+                });
 
             res.json({
                 success: true,
                 data: {
                     invoice,
-                    items
+                    items: itemsResult.rows
                 }
             });
 

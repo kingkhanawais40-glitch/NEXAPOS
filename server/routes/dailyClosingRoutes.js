@@ -8,16 +8,22 @@ const roleMiddleware = require("../middleware/roleMiddleware");
 // ==========================================
 // COMPUTE LIVE CASH FIGURES FOR A GIVEN DATE
 // ==========================================
-function computeDailyFigures(closingDate) {
+async function computeDailyFigures(closingDate) {
+
     // Sales broken down by payment method
-    const salesByMethod = db.prepare(`
-        SELECT
-            payment_method,
-            COALESCE(SUM(paid_amount), 0) AS total
-        FROM invoices
-        WHERE DATE(created_at) = DATE(?)
-        GROUP BY payment_method
-    `).all(closingDate);
+    const salesResult = await db.execute({
+        sql: `
+            SELECT
+                payment_method,
+                COALESCE(SUM(paid_amount), 0) AS total
+            FROM invoices
+            WHERE DATE(created_at) = DATE(?)
+            GROUP BY payment_method
+        `,
+        args: [closingDate]
+    });
+
+    const salesByMethod = salesResult.rows;
 
     const salesTotals = {
         cash: 0,
@@ -28,36 +34,58 @@ function computeDailyFigures(closingDate) {
 
     salesByMethod.forEach((row) => {
         if (salesTotals[row.payment_method] !== undefined) {
-            salesTotals[row.payment_method] = Number(row.total || 0);
+            salesTotals[row.payment_method] =
+                Number(row.total || 0);
         }
     });
 
     // Customer cash payments received today
-    const customerCashPayments = db.prepare(`
-        SELECT COALESCE(SUM(amount), 0) AS total
-        FROM customer_ledger
-        WHERE transaction_type = 'credit'
-          AND invoice_id IS NULL
-          AND payment_method = 'cash'
-          AND DATE(created_at) = DATE(?)
-    `).get(closingDate);
+    const customerCashPaymentsResult = await db.execute({
+        sql: `
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM customer_ledger
+            WHERE transaction_type = 'credit'
+              AND invoice_id IS NULL
+              AND payment_method = 'cash'
+              AND DATE(created_at) = DATE(?)
+        `,
+        args: [closingDate]
+    });
+
+    const customerCashPayments =
+        customerCashPaymentsResult.rows[0] || {};
+
 
     // Cash expenses today
-    const cashExpenses = db.prepare(`
-        SELECT COALESCE(SUM(amount), 0) AS total
-        FROM expenses
-        WHERE expense_date = DATE(?)
-          AND payment_method = 'cash'
-    `).get(closingDate);
+    const cashExpensesResult = await db.execute({
+        sql: `
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM expenses
+            WHERE expense_date = DATE(?)
+              AND payment_method = 'cash'
+        `,
+        args: [closingDate]
+    });
+
+    const cashExpenses =
+        cashExpensesResult.rows[0] || {};
+
 
     // Supplier cash payments today
-    const supplierCashPayments = db.prepare(`
-        SELECT COALESCE(SUM(amount), 0) AS total
-        FROM supplier_ledger
-        WHERE transaction_type = 'credit'
-          AND payment_method = 'cash'
-          AND DATE(created_at) = DATE(?)
-    `).get(closingDate);
+    const supplierCashPaymentsResult = await db.execute({
+        sql: `
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM supplier_ledger
+            WHERE transaction_type = 'credit'
+              AND payment_method = 'cash'
+              AND DATE(created_at) = DATE(?)
+        `,
+        args: [closingDate]
+    });
+
+    const supplierCashPayments =
+        supplierCashPaymentsResult.rows[0] || {};
+
 
     return {
         cash_sales: salesTotals.cash,
@@ -73,10 +101,12 @@ function computeDailyFigures(closingDate) {
     };
 }
 
+
 // ==========================================
 // VALIDATE DATE
 // ==========================================
 function isValidDate(dateString) {
+
     if (typeof dateString !== "string") {
         return false;
     }
@@ -85,9 +115,11 @@ function isValidDate(dateString) {
         return false;
     }
 
-    const [year, month, day] = dateString.split("-").map(Number);
+    const [year, month, day] =
+    dateString.split("-").map(Number);
 
-    const date = new Date(Date.UTC(year, month - 1, day));
+    const date =
+        new Date(Date.UTC(year, month - 1, day));
 
     return (
         date.getUTCFullYear() === year &&
@@ -96,6 +128,7 @@ function isValidDate(dateString) {
     );
 }
 
+
 // ==========================================
 // GET LIVE SUMMARY
 // ==========================================
@@ -103,11 +136,14 @@ router.get(
     "/summary",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
+
         try {
+
             const closingDate =
                 req.query.date ||
                 new Date().toISOString().split("T")[0];
+
 
             if (!isValidDate(closingDate)) {
                 return res.status(400).json({
@@ -116,38 +152,67 @@ router.get(
                 });
             }
 
-            const figures = computeDailyFigures(closingDate);
+
+            const figures =
+                await computeDailyFigures(closingDate);
+
 
             // Previous actual closing cash
-            const previousClosing = db.prepare(`
-                SELECT actual_cash
-                FROM daily_closings
-                WHERE closing_date < ?
-                ORDER BY closing_date DESC
-                LIMIT 1
-            `).get(closingDate);
+            const previousClosingResult =
+                await db.execute({
+                    sql: `
+                        SELECT actual_cash
+                        FROM daily_closings
+                        WHERE closing_date < ?
+                        ORDER BY closing_date DESC
+                        LIMIT 1
+                    `,
+                    args: [closingDate]
+                });
 
-            const suggestedOpeningCash = previousClosing ?
+            const previousClosing =
+                previousClosingResult.rows[0] || null;
+
+
+            const suggestedOpeningCash =
+                previousClosing ?
                 Number(previousClosing.actual_cash || 0) :
                 0;
 
-            const existing = db.prepare(`
-                SELECT *
-                FROM daily_closings
-                WHERE closing_date = ?
-            `).get(closingDate);
+
+            const existingResult =
+                await db.execute({
+                    sql: `
+                        SELECT *
+                        FROM daily_closings
+                        WHERE closing_date = ?
+                    `,
+                    args: [closingDate]
+                });
+
+            const existing =
+                existingResult.rows[0] || null;
+
 
             res.json({
                 success: true,
+
                 data: {
                     date: closingDate,
+
                     ...figures,
+
                     suggested_opening_cash: suggestedOpeningCash,
-                    already_closed: !!existing,
+
+                    already_closed:
+                        !!existing,
+
                     existing_closing: existing || null
                 }
             });
+
         } catch (error) {
+
             console.error(
                 "Daily closing summary error:",
                 error
@@ -161,6 +226,7 @@ router.get(
     }
 );
 
+
 // ==========================================
 // SAVE / FINALIZE DAILY CLOSING
 // ==========================================
@@ -168,8 +234,10 @@ router.post(
     "/",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
+
         try {
+
             const {
                 date,
                 opening_cash = 0,
@@ -178,9 +246,11 @@ router.post(
                 reopen = false
             } = req.body;
 
+
             const closingDate =
                 date ||
                 new Date().toISOString().split("T")[0];
+
 
             // Validate date
             if (!isValidDate(closingDate)) {
@@ -190,8 +260,10 @@ router.post(
                 });
             }
 
+
             // Validate opening cash
-            const openingCashNumber = Number(opening_cash);
+            const openingCashNumber =
+                Number(opening_cash);
 
             if (!Number.isFinite(openingCashNumber) ||
                 openingCashNumber < 0
@@ -201,6 +273,7 @@ router.post(
                     message: "Opening cash must be a valid non-negative number"
                 });
             }
+
 
             // Validate actual cash
             if (
@@ -214,7 +287,9 @@ router.post(
                 });
             }
 
-            const actualCashNumber = Number(actual_cash);
+
+            const actualCashNumber =
+                Number(actual_cash);
 
             if (!Number.isFinite(actualCashNumber) ||
                 actualCashNumber < 0
@@ -225,18 +300,28 @@ router.post(
                 });
             }
 
+
             // Validate notes
             const cleanNotes =
                 typeof notes === "string" ?
                 notes.trim() :
                 "";
 
+
             // Check existing closing
-            const existing = db.prepare(`
-                SELECT *
-                FROM daily_closings
-                WHERE closing_date = ?
-            `).get(closingDate);
+            const existingResult =
+                await db.execute({
+                    sql: `
+                        SELECT *
+                        FROM daily_closings
+                        WHERE closing_date = ?
+                    `,
+                    args: [closingDate]
+                });
+
+            const existing =
+                existingResult.rows[0] || null;
+
 
             if (existing && !reopen) {
                 return res.status(400).json({
@@ -246,7 +331,10 @@ router.post(
                 });
             }
 
-            const figures = computeDailyFigures(closingDate);
+
+            const figures =
+                await computeDailyFigures(closingDate);
+
 
             // ==========================================
             // EXPECTED CASH
@@ -258,110 +346,144 @@ router.post(
                 figures.cash_expenses -
                 figures.supplier_cash_payments;
 
+
             const difference =
                 actualCashNumber - expectedCash;
+
 
             // ==========================================
             // SAVE TRANSACTION
             // ==========================================
-            const transaction = db.transaction(() => {
+            const transaction =
+                await db.transaction("write");
+
+            try {
 
                 if (existing) {
 
-                    db.prepare(`
-                        UPDATE daily_closings
-                        SET
-                            opening_cash = ?,
-                            cash_sales = ?,
-                            bank_sales = ?,
-                            easypaisa_sales = ?,
-                            jazzcash_sales = ?,
-                            customer_cash_payments = ?,
-                            cash_expenses = ?,
-                            supplier_cash_payments = ?,
-                            expected_cash = ?,
-                            actual_cash = ?,
-                            difference = ?,
-                            notes = ?,
-                            closed_by = ?,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE closing_date = ?
-                    `).run(
-                        openingCashNumber,
-                        figures.cash_sales,
-                        figures.bank_sales,
-                        figures.easypaisa_sales,
-                        figures.jazzcash_sales,
-                        figures.customer_cash_payments,
-                        figures.cash_expenses,
-                        figures.supplier_cash_payments,
-                        expectedCash,
-                        actualCashNumber,
-                        difference,
-                        cleanNotes,
-                        req.user ? req.user.username || null :
-                        null,
-                        closingDate
-                    );
+                    await transaction.execute({
+                        sql: `
+                            UPDATE daily_closings
+                            SET
+                                opening_cash = ?,
+                                cash_sales = ?,
+                                bank_sales = ?,
+                                easypaisa_sales = ?,
+                                jazzcash_sales = ?,
+                                customer_cash_payments = ?,
+                                cash_expenses = ?,
+                                supplier_cash_payments = ?,
+                                expected_cash = ?,
+                                actual_cash = ?,
+                                difference = ?,
+                                notes = ?,
+                                closed_by = ?,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE closing_date = ?
+                        `,
+                        args: [
+                            openingCashNumber,
+                            figures.cash_sales,
+                            figures.bank_sales,
+                            figures.easypaisa_sales,
+                            figures.jazzcash_sales,
+                            figures.customer_cash_payments,
+                            figures.cash_expenses,
+                            figures.supplier_cash_payments,
+                            expectedCash,
+                            actualCashNumber,
+                            difference,
+                            cleanNotes,
+                            req.user ?
+                            req.user.username || null :
+                            null,
+                            closingDate
+                        ]
+                    });
 
                 } else {
 
-                    db.prepare(`
-                        INSERT INTO daily_closings (
-                            closing_date,
-                            opening_cash,
-                            cash_sales,
-                            bank_sales,
-                            easypaisa_sales,
-                            jazzcash_sales,
-                            customer_cash_payments,
-                            cash_expenses,
-                            supplier_cash_payments,
-                            expected_cash,
-                            actual_cash,
+                    await transaction.execute({
+                        sql: `
+                            INSERT INTO daily_closings (
+                                closing_date,
+                                opening_cash,
+                                cash_sales,
+                                bank_sales,
+                                easypaisa_sales,
+                                jazzcash_sales,
+                                customer_cash_payments,
+                                cash_expenses,
+                                supplier_cash_payments,
+                                expected_cash,
+                                actual_cash,
+                                difference,
+                                notes,
+                                closed_by
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `,
+                        args: [
+                            closingDate,
+                            openingCashNumber,
+                            figures.cash_sales,
+                            figures.bank_sales,
+                            figures.easypaisa_sales,
+                            figures.jazzcash_sales,
+                            figures.customer_cash_payments,
+                            figures.cash_expenses,
+                            figures.supplier_cash_payments,
+                            expectedCash,
+                            actualCashNumber,
                             difference,
-                            notes,
-                            closed_by
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    `).run(
-                        closingDate,
-                        openingCashNumber,
-                        figures.cash_sales,
-                        figures.bank_sales,
-                        figures.easypaisa_sales,
-                        figures.jazzcash_sales,
-                        figures.customer_cash_payments,
-                        figures.cash_expenses,
-                        figures.supplier_cash_payments,
-                        expectedCash,
-                        actualCashNumber,
-                        difference,
-                        cleanNotes,
-                        req.user ? req.user.username || null : null
-                    );
+                            cleanNotes,
+                            req.user ?
+                            req.user.username || null :
+                            null
+                        ]
+                    });
                 }
-            });
 
-            transaction();
+
+                await transaction.commit();
+
+            } catch (transactionError) {
+
+                await transaction.rollback();
+
+                throw transactionError;
+            }
+
 
             // ==========================================
             // RETURN SAVED RECORD
             // ==========================================
-            const saved = db.prepare(`
-                SELECT *
-                FROM daily_closings
-                WHERE closing_date = ?
-            `).get(closingDate);
+            const savedResult =
+                await db.execute({
+                    sql: `
+                        SELECT *
+                        FROM daily_closings
+                        WHERE closing_date = ?
+                    `,
+                    args: [closingDate]
+                });
+
+            const saved =
+                savedResult.rows[0] || null;
+
 
             res.status(existing ? 200 : 201).json({
                 success: true,
+
                 message: existing ?
-                    "Daily closing updated successfully" : "Daily closing saved successfully",
+                    "Daily closing updated successfully" :
+                    "Daily closing saved successfully",
+
                 data: saved
             });
 
         } catch (error) {
+
             console.error(
                 "Daily closing save error:",
                 error
@@ -375,6 +497,7 @@ router.post(
     }
 );
 
+
 // ==========================================
 // GET CLOSING HISTORY
 // ==========================================
@@ -382,14 +505,21 @@ router.get(
     "/history",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
+
         try {
-            const closings = db.prepare(`
-                SELECT *
-                FROM daily_closings
-                ORDER BY closing_date DESC
-                LIMIT 60
-            `).all();
+
+            const closingsResult =
+                await db.execute(`
+                    SELECT *
+                    FROM daily_closings
+                    ORDER BY closing_date DESC
+                    LIMIT 60
+                `);
+
+            const closings =
+                closingsResult.rows;
+
 
             res.json({
                 success: true,
@@ -397,6 +527,7 @@ router.get(
             });
 
         } catch (error) {
+
             console.error(
                 "Daily closing history error:",
                 error
@@ -409,5 +540,6 @@ router.get(
         }
     }
 );
+
 
 module.exports = router;

@@ -15,33 +15,36 @@ router.get(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const suppliers = db.prepare(`
-                SELECT
-                    suppliers.*,
-                    (
-                        suppliers.opening_balance
-                        + COALESCE((
-                            SELECT SUM(amount)
-                            FROM supplier_ledger
-                            WHERE supplier_id = suppliers.id
-                            AND transaction_type = 'debit'
-                        ), 0)
-                        - COALESCE((
-                            SELECT SUM(amount)
-                            FROM supplier_ledger
-                            WHERE supplier_id = suppliers.id
-                            AND transaction_type = 'credit'
-                        ), 0)
-                    ) AS current_payable
-                FROM suppliers
-                ORDER BY suppliers.id DESC
-            `).all();
+            const result = await db.execute({
+                sql: `
+                    SELECT
+                        suppliers.*,
+                        (
+                            suppliers.opening_balance
+                            + COALESCE((
+                                SELECT SUM(amount)
+                                FROM supplier_ledger
+                                WHERE supplier_id = suppliers.id
+                                AND transaction_type = 'debit'
+                            ), 0)
+                            - COALESCE((
+                                SELECT SUM(amount)
+                                FROM supplier_ledger
+                                WHERE supplier_id = suppliers.id
+                                AND transaction_type = 'credit'
+                            ), 0)
+                        ) AS current_payable
+                    FROM suppliers
+                    ORDER BY suppliers.id DESC
+                `,
+                args: []
+            });
 
             res.json({
                 success: true,
-                data: suppliers
+                data: result.rows
             });
 
         } catch (error) {
@@ -65,29 +68,47 @@ router.get(
     "/:id",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const supplier = db.prepare(`
-                SELECT
-                    suppliers.*,
-                    (
-                        suppliers.opening_balance
-                        + COALESCE((
-                            SELECT SUM(amount)
-                            FROM supplier_ledger
-                            WHERE supplier_id = suppliers.id
-                            AND transaction_type = 'debit'
-                        ), 0)
-                        - COALESCE((
-                            SELECT SUM(amount)
-                            FROM supplier_ledger
-                            WHERE supplier_id = suppliers.id
-                            AND transaction_type = 'credit'
-                        ), 0)
-                    ) AS current_payable
-                FROM suppliers
-                WHERE suppliers.id = ?
-            `).get(req.params.id);
+            const supplierId =
+                Number(req.params.id);
+
+            if (!Number.isInteger(supplierId) ||
+                supplierId <= 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid supplier ID is required"
+                });
+            }
+
+            const result = await db.execute({
+                sql: `
+                    SELECT
+                        suppliers.*,
+                        (
+                            suppliers.opening_balance
+                            + COALESCE((
+                                SELECT SUM(amount)
+                                FROM supplier_ledger
+                                WHERE supplier_id = suppliers.id
+                                AND transaction_type = 'debit'
+                            ), 0)
+                            - COALESCE((
+                                SELECT SUM(amount)
+                                FROM supplier_ledger
+                                WHERE supplier_id = suppliers.id
+                                AND transaction_type = 'credit'
+                            ), 0)
+                        ) AS current_payable
+                    FROM suppliers
+                    WHERE suppliers.id = ?
+                `,
+                args: [supplierId]
+            });
+
+            const supplier =
+                result.rows[0];
 
             if (!supplier) {
                 return res.status(404).json({
@@ -122,7 +143,7 @@ router.post(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 name,
@@ -141,8 +162,10 @@ router.post(
             if (
                 opening_balance !== undefined &&
                 opening_balance !== "" &&
-                (isNaN(Number(opening_balance)) ||
-                    Number(opening_balance) < 0)
+                (
+                    isNaN(Number(opening_balance)) ||
+                    Number(opening_balance) < 0
+                )
             ) {
                 return res.status(400).json({
                     success: false,
@@ -150,25 +173,28 @@ router.post(
                 });
             }
 
-            const result = db.prepare(`
-                INSERT INTO suppliers (
-                    name,
-                    phone,
-                    address,
-                    opening_balance
-                )
-                VALUES (?, ?, ?, ?)
-            `).run(
-                name.trim(),
-                phone || null,
-                address || null,
-                Number(opening_balance || 0)
-            );
+            const result = await db.execute({
+                sql: `
+                    INSERT INTO suppliers (
+                        name,
+                        phone,
+                        address,
+                        opening_balance
+                    )
+                    VALUES (?, ?, ?, ?)
+                `,
+                args: [
+                    name.trim(),
+                    phone || null,
+                    address || null,
+                    Number(opening_balance || 0)
+                ]
+            });
 
             res.status(201).json({
                 success: true,
                 message: "Supplier added successfully",
-                id: result.lastInsertRowid
+                id: Number(result.lastInsertRowid)
             });
 
         } catch (error) {
@@ -192,7 +218,7 @@ router.put(
     "/:id",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 name,
@@ -201,11 +227,30 @@ router.put(
                 opening_balance
             } = req.body;
 
-            const supplier = db.prepare(`
-                SELECT *
-                FROM suppliers
-                WHERE id = ?
-            `).get(req.params.id);
+            const supplierId =
+                Number(req.params.id);
+
+            if (!Number.isInteger(supplierId) ||
+                supplierId <= 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid supplier ID is required"
+                });
+            }
+
+            const supplierResult =
+                await db.execute({
+                    sql: `
+                        SELECT *
+                        FROM suppliers
+                        WHERE id = ?
+                    `,
+                    args: [supplierId]
+                });
+
+            const supplier =
+                supplierResult.rows[0];
 
             if (!supplier) {
                 return res.status(404).json({
@@ -217,8 +262,10 @@ router.put(
             if (
                 opening_balance !== undefined &&
                 opening_balance !== "" &&
-                (isNaN(Number(opening_balance)) ||
-                    Number(opening_balance) < 0)
+                (
+                    isNaN(Number(opening_balance)) ||
+                    Number(opening_balance) < 0
+                )
             ) {
                 return res.status(400).json({
                     success: false,
@@ -226,33 +273,51 @@ router.put(
                 });
             }
 
-            db.prepare(`
-                UPDATE suppliers
-                SET
-                    name = ?,
-                    phone = ?,
-                    address = ?,
-                    opening_balance = ?
-                WHERE id = ?
-            `).run(
+            const updatedName =
                 name && name.trim() ?
                 name.trim() :
-                supplier.name,
+                supplier.name;
 
+            const updatedPhone =
                 phone !== undefined ?
                 phone :
-                supplier.phone,
+                supplier.phone;
 
+            const updatedAddress =
                 address !== undefined ?
                 address :
-                supplier.address,
+                supplier.address;
 
+            const updatedOpeningBalance =
                 opening_balance !== undefined ?
                 Number(opening_balance) :
-                supplier.opening_balance,
+                Number(supplier.opening_balance);
 
-                req.params.id
-            );
+            const result = await db.execute({
+                sql: `
+                    UPDATE suppliers
+                    SET
+                        name = ?,
+                        phone = ?,
+                        address = ?,
+                        opening_balance = ?
+                    WHERE id = ?
+                `,
+                args: [
+                    updatedName,
+                    updatedPhone,
+                    updatedAddress,
+                    updatedOpeningBalance,
+                    supplierId
+                ]
+            });
+
+            if (Number(result.rowsAffected) === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Supplier could not be updated"
+                });
+            }
 
             res.json({
                 success: true,
@@ -260,7 +325,10 @@ router.put(
             });
 
         } catch (error) {
-            console.error("Update Supplier Error:", error);
+            console.error(
+                "Update Supplier Error:",
+                error
+            );
 
             res.status(500).json({
                 success: false,
@@ -280,13 +348,32 @@ router.delete(
     "/:id",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const supplier = db.prepare(`
-                SELECT id
-                FROM suppliers
-                WHERE id = ?
-            `).get(req.params.id);
+            const supplierId =
+                Number(req.params.id);
+
+            if (!Number.isInteger(supplierId) ||
+                supplierId <= 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid supplier ID is required"
+                });
+            }
+
+            const supplierResult =
+                await db.execute({
+                    sql: `
+                        SELECT id
+                        FROM suppliers
+                        WHERE id = ?
+                    `,
+                    args: [supplierId]
+                });
+
+            const supplier =
+                supplierResult.rows[0];
 
             if (!supplier) {
                 return res.status(404).json({
@@ -295,10 +382,20 @@ router.delete(
                 });
             }
 
-            db.prepare(`
-                DELETE FROM suppliers
-                WHERE id = ?
-            `).run(req.params.id);
+            const result = await db.execute({
+                sql: `
+                    DELETE FROM suppliers
+                    WHERE id = ?
+                `,
+                args: [supplierId]
+            });
+
+            if (Number(result.rowsAffected) === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Supplier could not be deleted"
+                });
+            }
 
             res.json({
                 success: true,
@@ -306,7 +403,10 @@ router.delete(
             });
 
         } catch (error) {
-            console.error("Delete Supplier Error:", error);
+            console.error(
+                "Delete Supplier Error:",
+                error
+            );
 
             res.status(500).json({
                 success: false,

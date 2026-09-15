@@ -1,10 +1,12 @@
-const Database = require("better-sqlite3");
-const path = require("path");
+require("dotenv").config();
 
-const dbPath = path.join(__dirname, "store.db");
+const { createClient } = require("@libsql/client");
 
-const db = new Database(dbPath);
+const client = createClient({
+    url: process.env.TURSO_DATABASE_URL,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+});
 
-console.log("SQLite database connected successfully!");
+console.log("Turso database client initialized successfully!");
 
-module.exports = db;
+module.exports = client;

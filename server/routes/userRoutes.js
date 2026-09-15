@@ -17,9 +17,9 @@ router.get(
     "/",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const users = db.prepare(`
+            const result = await db.execute(`
                 SELECT
                     id,
                     username,
@@ -27,7 +27,9 @@ router.get(
                     status
                 FROM users
                 ORDER BY id ASC
-            `).all();
+            `);
+
+            const users = result.rows;
 
             return res.json({
                 success: true,
@@ -127,11 +129,17 @@ router.post(
             // -----------------------------
             // CHECK EXISTING USER
             // -----------------------------
-            const existingUser = db.prepare(`
-                SELECT id
-                FROM users
-                WHERE LOWER(username) = ?
-            `).get(username);
+            const existingUserResult = await db.execute({
+                sql: `
+                    SELECT id
+                    FROM users
+                    WHERE LOWER(username) = ?
+                `,
+                args: [username]
+            });
+
+            const existingUser =
+                existingUserResult.rows[0] || null;
 
             if (existingUser) {
                 return res.status(409).json({
@@ -151,24 +159,27 @@ router.post(
             // -----------------------------
             // CREATE USER
             // -----------------------------
-            const result = db.prepare(`
-                INSERT INTO users (
+            const result = await db.execute({
+                sql: `
+                    INSERT INTO users (
+                        username,
+                        password,
+                        role
+                    )
+                    VALUES (?, ?, ?)
+                `,
+                args: [
                     username,
-                    password,
+                    hashedPassword,
                     role
-                )
-                VALUES (?, ?, ?)
-            `).run(
-                username,
-                hashedPassword,
-                role
-            );
+                ]
+            });
 
             return res.status(201).json({
                 success: true,
                 message: "User created successfully",
                 data: {
-                    id: result.lastInsertRowid,
+                    id: Number(result.lastInsertRowid),
                     username,
                     role
                 }
@@ -225,14 +236,20 @@ router.put(
             // -----------------------------
             // CHECK USER
             // -----------------------------
-            const user = db.prepare(`
-                SELECT
-                    id,
-                    username,
-                    role
-                FROM users
-                WHERE id = ?
-            `).get(userId);
+            const userResult = await db.execute({
+                sql: `
+                    SELECT
+                        id,
+                        username,
+                        role
+                    FROM users
+                    WHERE id = ?
+                `,
+                args: [userId]
+            });
+
+            const user =
+                userResult.rows[0] || null;
 
             if (!user) {
                 return res.status(404).json({
@@ -252,14 +269,17 @@ router.put(
             // -----------------------------
             // UPDATE PASSWORD
             // -----------------------------
-            db.prepare(`
-                UPDATE users
-                SET password = ?
-                WHERE id = ?
-            `).run(
-                hashedPassword,
-                userId
-            );
+            await db.execute({
+                sql: `
+                    UPDATE users
+                    SET password = ?
+                    WHERE id = ?
+                `,
+                args: [
+                    hashedPassword,
+                    userId
+                ]
+            });
 
             return res.json({
                 success: true,
@@ -291,7 +311,7 @@ router.delete(
     "/:id",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const userId = Number(req.params.id);
 
@@ -319,14 +339,20 @@ router.delete(
             // -----------------------------
             // CHECK USER
             // -----------------------------
-            const user = db.prepare(`
-                SELECT
-                    id,
-                    username,
-                    role
-                FROM users
-                WHERE id = ?
-            `).get(userId);
+            const userResult = await db.execute({
+                sql: `
+                    SELECT
+                        id,
+                        username,
+                        role
+                    FROM users
+                    WHERE id = ?
+                `,
+                args: [userId]
+            });
+
+            const user =
+                userResult.rows[0] || null;
 
             if (!user) {
                 return res.status(404).json({
@@ -338,10 +364,20 @@ router.delete(
             // -----------------------------
             // DELETE USER
             // -----------------------------
-            db.prepare(`
-                DELETE FROM users
-                WHERE id = ?
-            `).run(userId);
+            const deleteResult = await db.execute({
+                sql: `
+                    DELETE FROM users
+                    WHERE id = ?
+                `,
+                args: [userId]
+            });
+
+            if (Number(deleteResult.rowsAffected) === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: "User not found"
+                });
+            }
 
             return res.json({
                 success: true,
@@ -369,121 +405,130 @@ router.delete(
 // LOGIN
 // PUBLIC ROUTE
 // =====================================================
-router.post("/login", async(req, res) => {
-    try {
-        let {
-            username,
-            password
-        } = req.body;
+router.post(
+    "/login",
+    async(req, res) => {
+        try {
+            let {
+                username,
+                password
+            } = req.body;
 
-        // -----------------------------
-        // BASIC VALIDATION
-        // -----------------------------
-        if (
-            typeof username !== "string" ||
-            typeof password !== "string"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Username and password are required"
+            // -----------------------------
+            // BASIC VALIDATION
+            // -----------------------------
+            if (
+                typeof username !== "string" ||
+                typeof password !== "string"
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Username and password are required"
+                });
+            }
+
+            username = username.trim().toLowerCase();
+
+            if (!username || !password) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Username and password are required"
+                });
+            }
+
+            // -----------------------------
+            // JWT SECRET CHECK
+            // -----------------------------
+            if (!process.env.JWT_SECRET) {
+                console.error("JWT_SECRET is missing");
+
+                return res.status(500).json({
+                    success: false,
+                    message: "Server configuration error"
+                });
+            }
+
+            // -----------------------------
+            // FIND ACTIVE USER
+            // -----------------------------
+            const userResult = await db.execute({
+                sql: `
+                    SELECT
+                        id,
+                        username,
+                        password,
+                        role,
+                        status
+                    FROM users
+                    WHERE LOWER(username) = ?
+                      AND status = 'active'
+                `,
+                args: [username]
             });
-        }
 
-        username = username.trim().toLowerCase();
+            const user =
+                userResult.rows[0] || null;
 
-        if (!username || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "Username and password are required"
+            if (!user) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Invalid username or password"
+                });
+            }
+
+            // -----------------------------
+            // VERIFY PASSWORD
+            // -----------------------------
+            const passwordMatch = await bcrypt.compare(
+                password,
+                user.password
+            );
+
+            if (!passwordMatch) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Invalid username or password"
+                });
+            }
+
+            // -----------------------------
+            // CREATE JWT
+            // -----------------------------
+            const token = jwt.sign({
+                    id: user.id,
+                    username: user.username,
+                    role: user.role
+                },
+                process.env.JWT_SECRET, {
+                    expiresIn: "1d"
+                }
+            );
+
+            // -----------------------------
+            // LOGIN SUCCESS
+            // -----------------------------
+            return res.json({
+                success: true,
+                message: "Login successful",
+                data: {
+                    id: user.id,
+                    username: user.username,
+                    role: user.role,
+                    status: user.status,
+                    token
+                }
             });
-        }
 
-        // -----------------------------
-        // JWT SECRET CHECK
-        // -----------------------------
-        if (!process.env.JWT_SECRET) {
-            console.error("JWT_SECRET is missing");
+        } catch (error) {
+            console.error("Login Error:", error);
 
             return res.status(500).json({
                 success: false,
-                message: "Server configuration error"
+                message: "An unexpected error occurred. Please try again."
             });
         }
-
-        // -----------------------------
-        // FIND ACTIVE USER
-        // -----------------------------
-        const user = db.prepare(`
-            SELECT
-                id,
-                username,
-                password,
-                role,
-                status
-            FROM users
-            WHERE LOWER(username) = ?
-              AND status = 'active'
-        `).get(username);
-
-        if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid username or password"
-            });
-        }
-
-        // -----------------------------
-        // VERIFY PASSWORD
-        // -----------------------------
-        const passwordMatch = await bcrypt.compare(
-            password,
-            user.password
-        );
-
-        if (!passwordMatch) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid username or password"
-            });
-        }
-
-        // -----------------------------
-        // CREATE JWT
-        // -----------------------------
-        const token = jwt.sign({
-                id: user.id,
-                username: user.username,
-                role: user.role
-            },
-            process.env.JWT_SECRET, {
-                expiresIn: "1d"
-            }
-        );
-
-        // -----------------------------
-        // LOGIN SUCCESS
-        // -----------------------------
-        return res.json({
-            success: true,
-            message: "Login successful",
-            data: {
-                id: user.id,
-                username: user.username,
-                role: user.role,
-                status: user.status,
-                token
-            }
-        });
-
-    } catch (error) {
-        console.error("Login Error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "An unexpected error occurred. Please try again."
-        });
     }
-});
+);
 
 
 module.exports = router;

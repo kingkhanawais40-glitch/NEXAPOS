@@ -5,7 +5,6 @@ const roleMiddleware = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
-
 // =====================================================
 // GET SETTINGS
 // ADMIN + MANAGER + CASHIER
@@ -14,17 +13,16 @@ const router = express.Router();
 router.get(
     "/",
     authMiddleware,
-    (req, res) => {
+    async(req, res) => {
         try {
 
-            let settings = db
-                .prepare(`
-                    SELECT *
-                    FROM settings
-                    WHERE id = 1
-                `)
-                .get();
+            let settingsResult = await db.execute(`
+                SELECT *
+                FROM settings
+                WHERE id = 1
+            `);
 
+            let settings = settingsResult.rows[0] || null;
 
             // =================================================
             // CREATE DEFAULT SETTINGS IF NOT FOUND
@@ -32,44 +30,45 @@ router.get(
 
             if (!settings) {
 
-                db.prepare(`
-                    INSERT INTO settings (
-                        id,
-                        store_name,
-                        store_phone,
-                        store_address,
-                        invoice_footer,
-                        currency,
-                        default_tax
-                    )
-                    VALUES (
-                        1,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?
-                    )
-                `).run(
-                    "General Store",
-                    "",
-                    "",
-                    "Thank you for shopping with us!",
-                    "PKR",
-                    0
-                );
+                await db.execute({
+                    sql: `
+                        INSERT INTO settings (
+                            id,
+                            store_name,
+                            store_phone,
+                            store_address,
+                            invoice_footer,
+                            currency,
+                            default_tax
+                        )
+                        VALUES (
+                            1,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?
+                        )
+                    `,
+                    args: [
+                        "General Store",
+                        "",
+                        "",
+                        "Thank you for shopping with us!",
+                        "PKR",
+                        0
+                    ]
+                });
 
+                settingsResult = await db.execute(`
+                    SELECT *
+                    FROM settings
+                    WHERE id = 1
+                `);
 
-                settings = db
-                    .prepare(`
-                        SELECT *
-                        FROM settings
-                        WHERE id = 1
-                    `)
-                    .get();
+                settings = settingsResult.rows[0] || null;
             }
-
 
             // =================================================
             // SUCCESS RESPONSE
@@ -95,7 +94,6 @@ router.get(
     }
 );
 
-
 // =====================================================
 // UPDATE SETTINGS
 // ADMIN ONLY
@@ -105,7 +103,7 @@ router.put(
     "/",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
 
             const {
@@ -116,7 +114,6 @@ router.put(
                 currency,
                 default_tax
             } = req.body;
-
 
             // =================================================
             // STORE NAME VALIDATION
@@ -132,7 +129,6 @@ router.put(
                 });
             }
 
-
             // =================================================
             // CURRENCY VALIDATION
             // =================================================
@@ -143,14 +139,12 @@ router.put(
                 currency.trim().toUpperCase() :
                 "PKR";
 
-
             if (selectedCurrency.length > 10) {
                 return res.status(400).json({
                     success: false,
                     message: "Currency is invalid"
                 });
             }
-
 
             // =================================================
             // TAX VALIDATION
@@ -163,14 +157,12 @@ router.put(
                 0 :
                 Number(default_tax);
 
-
             if (!Number.isFinite(tax)) {
                 return res.status(400).json({
                     success: false,
                     message: "Default tax must be a valid number"
                 });
             }
-
 
             if (tax < 0) {
                 return res.status(400).json({
@@ -179,14 +171,12 @@ router.put(
                 });
             }
 
-
             if (tax > 100) {
                 return res.status(400).json({
                     success: false,
                     message: "Default tax cannot exceed 100%"
                 });
             }
-
 
             // =================================================
             // SAFE STRING VALUES
@@ -197,73 +187,72 @@ router.put(
                 store_phone.trim() :
                 "";
 
-
             const storeAddress =
                 typeof store_address === "string" ?
                 store_address.trim() :
                 "";
-
 
             const invoiceFooter =
                 typeof invoice_footer === "string" ?
                 invoice_footer.trim() :
                 "";
 
-
             // =================================================
             // INSERT / UPDATE SETTINGS
             // =================================================
 
-            db.prepare(`
-                INSERT INTO settings (
-                    id,
-                    store_name,
-                    store_phone,
-                    store_address,
-                    invoice_footer,
-                    currency,
-                    default_tax
-                )
-                VALUES (
-                    1,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?
-                )
+            await db.execute({
+                sql: `
+                    INSERT INTO settings (
+                        id,
+                        store_name,
+                        store_phone,
+                        store_address,
+                        invoice_footer,
+                        currency,
+                        default_tax
+                    )
+                    VALUES (
+                        1,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?
+                    )
 
-                ON CONFLICT(id)
-                DO UPDATE SET
-                    store_name = excluded.store_name,
-                    store_phone = excluded.store_phone,
-                    store_address = excluded.store_address,
-                    invoice_footer = excluded.invoice_footer,
-                    currency = excluded.currency,
-                    default_tax = excluded.default_tax
-            `).run(
-                store_name.trim(),
-                storePhone,
-                storeAddress,
-                invoiceFooter,
-                selectedCurrency,
-                tax
-            );
-
+                    ON CONFLICT(id)
+                    DO UPDATE SET
+                        store_name = excluded.store_name,
+                        store_phone = excluded.store_phone,
+                        store_address = excluded.store_address,
+                        invoice_footer = excluded.invoice_footer,
+                        currency = excluded.currency,
+                        default_tax = excluded.default_tax
+                `,
+                args: [
+                    store_name.trim(),
+                    storePhone,
+                    storeAddress,
+                    invoiceFooter,
+                    selectedCurrency,
+                    tax
+                ]
+            });
 
             // =================================================
             // GET UPDATED SETTINGS
             // =================================================
 
-            const settings = db
-                .prepare(`
-                    SELECT *
-                    FROM settings
-                    WHERE id = 1
-                `)
-                .get();
+            const settingsResult = await db.execute(`
+                SELECT *
+                FROM settings
+                WHERE id = 1
+            `);
 
+            const settings =
+                settingsResult.rows[0] || null;
 
             // =================================================
             // SUCCESS RESPONSE
@@ -289,7 +278,6 @@ router.put(
         }
     }
 );
-
 
 // =====================================================
 // EXPORT ROUTER

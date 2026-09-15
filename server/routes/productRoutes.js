@@ -13,19 +13,17 @@ router.get(
     "/categories",
     authMiddleware,
     roleMiddleware("admin", "manager", "cashier"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const categories = db
-                .prepare(`
-                    SELECT *
-                    FROM categories
-                    ORDER BY name ASC
-                `)
-                .all();
+            const result = await db.execute(`
+                SELECT *
+                FROM categories
+                ORDER BY name ASC
+            `);
 
             res.json({
                 success: true,
-                data: categories
+                data: result.rows
             });
         } catch (error) {
             console.error("GET CATEGORIES ERROR:", error);
@@ -47,7 +45,7 @@ router.post(
     "/categories",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const { name } = req.body;
 
@@ -68,32 +66,34 @@ router.post(
             }
 
             // Prevent duplicate category names
-            const existingCategory = db
-                .prepare(`
+            const existingCategory = await db.execute({
+                sql: `
                     SELECT id
                     FROM categories
                     WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))
-                `)
-                .get(categoryName);
+                `,
+                args: [categoryName]
+            });
 
-            if (existingCategory) {
+            if (existingCategory.rows.length > 0) {
                 return res.status(400).json({
                     success: false,
                     message: "A category with this name already exists"
                 });
             }
 
-            const result = db
-                .prepare(`
+            const result = await db.execute({
+                sql: `
                     INSERT INTO categories (name)
                     VALUES (?)
-                `)
-                .run(categoryName);
+                `,
+                args: [categoryName]
+            });
 
             res.status(201).json({
                 success: true,
                 message: "Category added successfully",
-                id: result.lastInsertRowid
+                id: Number(result.lastInsertRowid)
             });
         } catch (error) {
             console.error("ADD CATEGORY ERROR:", error);
@@ -115,23 +115,21 @@ router.get(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager", "cashier"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const products = db
-                .prepare(`
-                    SELECT
-                        products.*,
-                        categories.name AS category_name
-                    FROM products
-                    LEFT JOIN categories
-                        ON products.category_id = categories.id
-                    ORDER BY products.id DESC
-                `)
-                .all();
+            const result = await db.execute(`
+                SELECT
+                    products.*,
+                    categories.name AS category_name
+                FROM products
+                LEFT JOIN categories
+                    ON products.category_id = categories.id
+                ORDER BY products.id DESC
+            `);
 
             res.json({
                 success: true,
-                data: products
+                data: result.rows
             });
         } catch (error) {
             console.error("GET PRODUCTS ERROR:", error);
@@ -153,7 +151,7 @@ router.post(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 name,
@@ -279,15 +277,16 @@ router.post(
                     });
                 }
 
-                const category = db
-                    .prepare(`
+                const category = await db.execute({
+                    sql: `
                         SELECT id
                         FROM categories
                         WHERE id = ?
-                    `)
-                    .get(categoryId);
+                    `,
+                    args: [categoryId]
+                });
 
-                if (!category) {
+                if (category.rows.length === 0) {
                     return res.status(400).json({
                         success: false,
                         message: "Selected category does not exist"
@@ -309,15 +308,16 @@ router.post(
             // CHECK DUPLICATE BARCODE
             // ---------------------------------------------
             if (cleanBarcode) {
-                const existingBarcode = db
-                    .prepare(`
+                const existingBarcode = await db.execute({
+                    sql: `
                         SELECT id
                         FROM products
                         WHERE barcode = ?
-                    `)
-                    .get(cleanBarcode);
+                    `,
+                    args: [cleanBarcode]
+                });
 
-                if (existingBarcode) {
+                if (existingBarcode.rows.length > 0) {
                     return res.status(400).json({
                         success: false,
                         message: "A product with this barcode already exists"
@@ -336,8 +336,8 @@ router.post(
             // ---------------------------------------------
             // INSERT PRODUCT
             // ---------------------------------------------
-            const result = db
-                .prepare(`
+            const result = await db.execute({
+                sql: `
                     INSERT INTO products (
                         name,
                         barcode,
@@ -349,8 +349,8 @@ router.post(
                         low_stock_limit
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `)
-                .run(
+                `,
+                args: [
                     productName,
                     cleanBarcode,
                     categoryId,
@@ -359,12 +359,13 @@ router.post(
                     salePriceNumber,
                     stockNumber,
                     lowStockLimitNumber
-                );
+                ]
+            });
 
             res.status(201).json({
                 success: true,
                 message: "Product added successfully",
-                id: result.lastInsertRowid
+                id: Number(result.lastInsertRowid)
             });
         } catch (error) {
             console.error("ADD PRODUCT ERROR:", error);
@@ -386,7 +387,7 @@ router.put(
     "/:id",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const productId = Number(req.params.id);
 
@@ -441,15 +442,16 @@ router.put(
             // ---------------------------------------------
             // FIND PRODUCT
             // ---------------------------------------------
-            const product = db
-                .prepare(`
+            const product = await db.execute({
+                sql: `
                     SELECT id
                     FROM products
                     WHERE id = ?
-                `)
-                .get(productId);
+                `,
+                args: [productId]
+            });
 
-            if (!product) {
+            if (product.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
                     message: "Product not found"
@@ -539,15 +541,16 @@ router.put(
                     });
                 }
 
-                const category = db
-                    .prepare(`
+                const category = await db.execute({
+                    sql: `
                         SELECT id
                         FROM categories
                         WHERE id = ?
-                    `)
-                    .get(categoryId);
+                    `,
+                    args: [categoryId]
+                });
 
-                if (!category) {
+                if (category.rows.length === 0) {
                     return res.status(400).json({
                         success: false,
                         message: "Selected category does not exist"
@@ -569,16 +572,17 @@ router.put(
             // CHECK DUPLICATE BARCODE
             // ---------------------------------------------
             if (cleanBarcode) {
-                const existingBarcode = db
-                    .prepare(`
+                const existingBarcode = await db.execute({
+                    sql: `
                         SELECT id
                         FROM products
                         WHERE barcode = ?
                         AND id != ?
-                    `)
-                    .get(cleanBarcode, productId);
+                    `,
+                    args: [cleanBarcode, productId]
+                });
 
-                if (existingBarcode) {
+                if (existingBarcode.rows.length > 0) {
                     return res.status(400).json({
                         success: false,
                         message: "A product with this barcode already exists"
@@ -597,29 +601,32 @@ router.put(
             // ---------------------------------------------
             // UPDATE PRODUCT
             // ---------------------------------------------
-            db.prepare(`
-                UPDATE products
-                SET
-                    name = ?,
-                    barcode = ?,
-                    category_id = ?,
-                    unit = ?,
-                    purchase_price = ?,
-                    sale_price = ?,
-                    stock = ?,
-                    low_stock_limit = ?
-                WHERE id = ?
-            `).run(
-                productName,
-                cleanBarcode,
-                categoryId,
-                cleanUnit,
-                purchasePriceNumber,
-                salePriceNumber,
-                stockNumber,
-                lowStockLimitNumber,
-                productId
-            );
+            await db.execute({
+                sql: `
+                    UPDATE products
+                    SET
+                        name = ?,
+                        barcode = ?,
+                        category_id = ?,
+                        unit = ?,
+                        purchase_price = ?,
+                        sale_price = ?,
+                        stock = ?,
+                        low_stock_limit = ?
+                    WHERE id = ?
+                `,
+                args: [
+                    productName,
+                    cleanBarcode,
+                    categoryId,
+                    cleanUnit,
+                    purchasePriceNumber,
+                    salePriceNumber,
+                    stockNumber,
+                    lowStockLimitNumber,
+                    productId
+                ]
+            });
 
             res.json({
                 success: true,
@@ -645,7 +652,7 @@ router.delete(
     "/:id",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const productId = Number(req.params.id);
 
@@ -656,25 +663,29 @@ router.delete(
                 });
             }
 
-            const product = db
-                .prepare(`
+            const product = await db.execute({
+                sql: `
                     SELECT id
                     FROM products
                     WHERE id = ?
-                `)
-                .get(productId);
+                `,
+                args: [productId]
+            });
 
-            if (!product) {
+            if (product.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
                     message: "Product not found"
                 });
             }
 
-            db.prepare(`
-                DELETE FROM products
-                WHERE id = ?
-            `).run(productId);
+            await db.execute({
+                sql: `
+                    DELETE FROM products
+                    WHERE id = ?
+                `,
+                args: [productId]
+            });
 
             res.json({
                 success: true,

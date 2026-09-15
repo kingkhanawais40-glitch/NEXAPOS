@@ -15,7 +15,7 @@ router.post(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 supplier_id,
@@ -91,193 +91,227 @@ router.post(
                 null;
 
             // =================================================
-            // DATABASE TRANSACTION
+            // GET SUPPLIER
             // =================================================
 
-            const transaction = db.transaction(() => {
-
-                // =================================================
-                // GET SUPPLIER
-                // =================================================
-
-                const supplier = db.prepare(`
+            const supplierResult = await db.execute({
+                sql: `
                     SELECT *
                     FROM suppliers
                     WHERE id = ?
-                `).get(supplierId);
+                `,
+                args: [supplierId]
+            });
 
-                if (!supplier) {
-                    throw new Error("Supplier not found");
+            const supplier =
+                supplierResult.rows[0];
+
+            if (!supplier) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Supplier not found"
+                });
+            }
+
+            // =================================================
+            // CHECK DUPLICATE INVOICE
+            // =================================================
+
+            if (cleanInvoiceNumber) {
+                const existingPurchaseResult =
+                    await db.execute({
+                        sql: `
+                            SELECT id
+                            FROM purchases
+                            WHERE invoice_number = ?
+                        `,
+                        args: [cleanInvoiceNumber]
+                    });
+
+                if (
+                    existingPurchaseResult.rows.length > 0
+                ) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Purchase invoice ${cleanInvoiceNumber} already exists`
+                    });
                 }
+            }
 
-                // =================================================
-                // CHECK DUPLICATE INVOICE
-                // =================================================
+            // =================================================
+            // VALIDATE PRODUCTS + CALCULATE TOTAL
+            // =================================================
 
-                if (cleanInvoiceNumber) {
-                    const existingPurchase = db.prepare(`
-                        SELECT id
-                        FROM purchases
-                        WHERE invoice_number = ?
-                    `).get(cleanInvoiceNumber);
+            let totalAmount = 0;
 
-                    if (existingPurchase) {
-                        throw new Error(
-                            `Purchase invoice ${cleanInvoiceNumber} already exists`
-                        );
-                    }
-                }
+            const validatedItems = [];
 
-                // =================================================
-                // PREPARE PRODUCT QUERY
-                // =================================================
+            for (const item of items) {
 
-                let totalAmount = 0;
+                const productId =
+                    Number(item.product_id);
 
-                const getProduct = db.prepare(`
-                    SELECT *
-                    FROM products
-                    WHERE id = ?
-                `);
-
-                // =================================================
-                // VALIDATE ITEMS + CALCULATE TOTAL
-                // =================================================
-
-                for (const item of items) {
-
-                    const productId = Number(
-                        item.product_id
-                    );
-
-                    if (!Number.isInteger(productId) ||
-                        productId <= 0
-                    ) {
-                        throw new Error(
-                            "Valid product ID is required"
-                        );
-                    }
-
-                    const product = getProduct.get(
-                        productId
-                    );
-
-                    if (!product) {
-                        throw new Error(
-                            `Product with ID ${productId} not found`
-                        );
-                    }
-
-                    const quantity = Number(
-                        item.quantity
-                    );
-
-                    const purchasePrice = Number(
-                        item.purchase_price
-                    );
-
-                    // ---------------------------------------------
-                    // VALIDATE QUANTITY
-                    // ---------------------------------------------
-
-                    if (!Number.isFinite(quantity) ||
-                        quantity <= 0
-                    ) {
-                        throw new Error(
-                            `Invalid quantity for ${product.name}`
-                        );
-                    }
-
-                    // ---------------------------------------------
-                    // VALIDATE PURCHASE PRICE
-                    // ---------------------------------------------
-
-                    if (
-                        item.purchase_price === undefined ||
-                        item.purchase_price === null ||
-                        item.purchase_price === "" ||
-                        !Number.isFinite(purchasePrice) ||
-                        purchasePrice < 0
-                    ) {
-                        throw new Error(
-                            `Invalid purchase price for ${product.name}`
-                        );
-                    }
-
-                    // ---------------------------------------------
-                    // CALCULATE TOTAL
-                    // ---------------------------------------------
-
-                    totalAmount +=
-                        quantity * purchasePrice;
-                }
-
-                // =================================================
-                // VALIDATE TOTAL
-                // =================================================
-
-                if (!Number.isFinite(totalAmount) ||
-                    totalAmount < 0
+                if (!Number.isInteger(productId) ||
+                    productId <= 0
                 ) {
                     throw new Error(
-                        "Invalid purchase total"
+                        "Valid product ID is required"
                     );
                 }
 
-                // =================================================
-                // VALIDATE PAID AMOUNT
-                // =================================================
+                const productResult =
+                    await db.execute({
+                        sql: `
+                            SELECT *
+                            FROM products
+                            WHERE id = ?
+                        `,
+                        args: [productId]
+                    });
 
-                const paid = Number(
-                    paid_amount
+                const product =
+                    productResult.rows[0];
+
+                if (!product) {
+                    throw new Error(
+                        `Product with ID ${productId} not found`
+                    );
+                }
+
+                const quantity =
+                    Number(item.quantity);
+
+                const purchasePrice =
+                    Number(item.purchase_price);
+
+                // ---------------------------------------------
+                // VALIDATE QUANTITY
+                // ---------------------------------------------
+
+                if (!Number.isFinite(quantity) ||
+                    quantity <= 0
+                ) {
+                    throw new Error(
+                        `Invalid quantity for ${product.name}`
+                    );
+                }
+
+                // ---------------------------------------------
+                // VALIDATE PURCHASE PRICE
+                // ---------------------------------------------
+
+                if (
+                    item.purchase_price === undefined ||
+                    item.purchase_price === null ||
+                    item.purchase_price === "" ||
+                    !Number.isFinite(purchasePrice) ||
+                    purchasePrice < 0
+                ) {
+                    throw new Error(
+                        `Invalid purchase price for ${product.name}`
+                    );
+                }
+
+                // ---------------------------------------------
+                // CALCULATE ITEM TOTAL
+                // ---------------------------------------------
+
+                const total =
+                    quantity * purchasePrice;
+
+                totalAmount += total;
+
+                validatedItems.push({
+                    productId,
+                    quantity,
+                    purchasePrice,
+                    total,
+                    productName: product.name
+                });
+            }
+
+            // =================================================
+            // VALIDATE TOTAL
+            // =================================================
+
+            if (!Number.isFinite(totalAmount) ||
+                totalAmount < 0
+            ) {
+                throw new Error(
+                    "Invalid purchase total"
                 );
+            }
 
-                if (!Number.isFinite(paid) ||
-                    paid < 0
-                ) {
-                    throw new Error(
-                        "Paid amount must be a valid non-negative number"
-                    );
-                }
+            // =================================================
+            // VALIDATE PAID AMOUNT
+            // =================================================
 
-                if (paid > totalAmount) {
-                    throw new Error(
-                        "Paid amount cannot be greater than purchase total"
-                    );
-                }
+            const paid =
+                Number(paid_amount);
 
-                // =================================================
-                // CALCULATE DUE
-                // =================================================
+            if (!Number.isFinite(paid) ||
+                paid < 0
+            ) {
+                throw new Error(
+                    "Paid amount must be a valid non-negative number"
+                );
+            }
 
-                const dueAmount =
-                    totalAmount - paid;
+            if (paid > totalAmount) {
+                throw new Error(
+                    "Paid amount cannot be greater than purchase total"
+                );
+            }
+
+            // =================================================
+            // CALCULATE DUE
+            // =================================================
+
+            const dueAmount =
+                totalAmount - paid;
+
+            // =================================================
+            // TURSO WRITE TRANSACTION
+            // =================================================
+
+            const transaction =
+                await db.transaction("write");
+
+            let purchase;
+
+            try {
 
                 // =================================================
                 // CREATE PURCHASE
                 // =================================================
 
-                const purchaseResult = db.prepare(`
-                    INSERT INTO purchases (
-                        supplier_name,
-                        invoice_number,
-                        total_amount,
-                        paid_amount,
-                        due_amount,
-                        payment_method
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                `).run(
-                    supplier.name,
-                    cleanInvoiceNumber,
-                    totalAmount,
-                    paid,
-                    dueAmount,
-                    selectedPaymentMethod
-                );
+                const purchaseResult =
+                    await transaction.execute({
+                        sql: `
+                            INSERT INTO purchases (
+                                supplier_name,
+                                invoice_number,
+                                total_amount,
+                                paid_amount,
+                                due_amount,
+                                payment_method
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        `,
+                        args: [
+                            supplier.name,
+                            cleanInvoiceNumber,
+                            totalAmount,
+                            paid,
+                            dueAmount,
+                            selectedPaymentMethod
+                        ]
+                    });
 
                 const purchaseId =
-                    purchaseResult.lastInsertRowid;
+                    Number(
+                        purchaseResult.lastInsertRowid
+                    );
 
                 // =================================================
                 // ADD DUE TO SUPPLIER LEDGER
@@ -285,114 +319,114 @@ router.post(
 
                 if (dueAmount > 0) {
 
-                    db.prepare(`
-                        INSERT INTO supplier_ledger (
-                            supplier_id,
-                            purchase_id,
-                            transaction_type,
-                            amount,
-                            description
-                        )
-                        VALUES (?, ?, 'debit', ?, ?)
-                    `).run(
-                        supplierId,
-                        purchaseId,
-                        dueAmount,
-                        `Credit purchase - ${supplier.name}`
-                    );
+                    await transaction.execute({
+                        sql: `
+                            INSERT INTO supplier_ledger (
+                                supplier_id,
+                                purchase_id,
+                                transaction_type,
+                                amount,
+                                description
+                            )
+                            VALUES (?, ?, 'debit', ?, ?)
+                        `,
+                        args: [
+                            supplierId,
+                            purchaseId,
+                            dueAmount,
+                            `Credit purchase - ${supplier.name}`
+                        ]
+                    });
                 }
-
-                // =================================================
-                // PREPARE STATEMENTS
-                // =================================================
-
-                const insertItem = db.prepare(`
-                    INSERT INTO purchase_items (
-                        purchase_id,
-                        product_id,
-                        quantity,
-                        purchase_price,
-                        total
-                    )
-                    VALUES (?, ?, ?, ?, ?)
-                `);
-
-                const updateStock = db.prepare(`
-                    UPDATE products
-                    SET stock = stock + ?
-                    WHERE id = ?
-                `);
-
-                const insertMovement = db.prepare(`
-                    INSERT INTO stock_movements (
-                        product_id,
-                        type,
-                        quantity,
-                        reference_id,
-                        reason
-                    )
-                    VALUES (?, 'purchase', ?, ?, ?)
-                `);
 
                 // =================================================
                 // SAVE ITEMS + STOCK + MOVEMENT
                 // =================================================
 
-                for (const item of items) {
-
-                    const productId = Number(
-                        item.product_id
-                    );
-
-                    const quantity = Number(
-                        item.quantity
-                    );
-
-                    const purchasePrice = Number(
-                        item.purchase_price
-                    );
-
-                    const total =
-                        quantity * purchasePrice;
+                for (const item of validatedItems) {
 
                     // ---------------------------------------------
                     // SAVE PURCHASE ITEM
                     // ---------------------------------------------
 
-                    insertItem.run(
-                        purchaseId,
-                        productId,
-                        quantity,
-                        purchasePrice,
-                        total
-                    );
+                    await transaction.execute({
+                        sql: `
+                            INSERT INTO purchase_items (
+                                purchase_id,
+                                product_id,
+                                quantity,
+                                purchase_price,
+                                total
+                            )
+                            VALUES (?, ?, ?, ?, ?)
+                        `,
+                        args: [
+                            purchaseId,
+                            item.productId,
+                            item.quantity,
+                            item.purchasePrice,
+                            item.total
+                        ]
+                    });
 
                     // ---------------------------------------------
                     // INCREASE STOCK
                     // ---------------------------------------------
 
-                    updateStock.run(
-                        quantity,
-                        productId
-                    );
+                    const updateStockResult =
+                        await transaction.execute({
+                            sql: `
+                                UPDATE products
+                                SET stock = stock + ?
+                                WHERE id = ?
+                            `,
+                            args: [
+                                item.quantity,
+                                item.productId
+                            ]
+                        });
+
+                    if (
+                        Number(
+                            updateStockResult.rowsAffected
+                        ) === 0
+                    ) {
+                        throw new Error(
+                            `Failed to update stock for ${item.productName}`
+                        );
+                    }
 
                     // ---------------------------------------------
                     // STOCK MOVEMENT
                     // ---------------------------------------------
 
-                    insertMovement.run(
-                        productId,
-                        quantity,
-                        purchaseId,
-                        `Purchase - ${supplier.name}`
-                    );
+                    await transaction.execute({
+                        sql: `
+                            INSERT INTO stock_movements (
+                                product_id,
+                                type,
+                                quantity,
+                                reference_id,
+                                reason
+                            )
+                            VALUES (?, 'purchase', ?, ?, ?)
+                        `,
+                        args: [
+                            item.productId,
+                            item.quantity,
+                            purchaseId,
+                            `Purchase - ${supplier.name}`
+                        ]
+                    });
                 }
 
                 // =================================================
-                // RETURN PURCHASE DATA
+                // COMMIT TRANSACTION
                 // =================================================
 
-                return {
+                await transaction.commit();
+
+                purchase = {
                     purchaseId,
                     supplierId,
                     supplierName: supplier.name,
@@ -401,13 +435,17 @@ router.post(
                     dueAmount,
                     paymentMethod: selectedPaymentMethod
                 };
-            });
+
+            } catch (transactionError) {
+
+                await transaction.rollback();
+
+                throw transactionError;
+            }
 
             // =================================================
-            // EXECUTE TRANSACTION
+            // SUCCESS RESPONSE
             // =================================================
-
-            const purchase = transaction();
 
             res.status(201).json({
                 success: true,
@@ -440,26 +478,31 @@ router.get(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
 
-            const purchases = db.prepare(`
-                SELECT
-                    purchases.*,
-                    COUNT(purchase_items.id) AS total_items
-                FROM purchases
+            const result =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            purchases.*,
+                            COUNT(purchase_items.id) AS total_items
+                        FROM purchases
 
-                LEFT JOIN purchase_items
-                    ON purchases.id = purchase_items.purchase_id
+                        LEFT JOIN purchase_items
+                            ON purchases.id =
+                               purchase_items.purchase_id
 
-                GROUP BY purchases.id
+                        GROUP BY purchases.id
 
-                ORDER BY purchases.id DESC
-            `).all();
+                        ORDER BY purchases.id DESC
+                    `,
+                    args: []
+                });
 
             res.json({
                 success: true,
-                data: purchases
+                data: result.rows
             });
 
         } catch (error) {
@@ -487,12 +530,11 @@ router.get(
     "/:id",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
 
-            const purchaseId = Number(
-                req.params.id
-            );
+            const purchaseId =
+                Number(req.params.id);
 
             if (!Number.isInteger(purchaseId) ||
                 purchaseId <= 0
@@ -507,11 +549,18 @@ router.get(
             // GET PURCHASE
             // =================================================
 
-            const purchase = db.prepare(`
-                SELECT *
-                FROM purchases
-                WHERE id = ?
-            `).get(purchaseId);
+            const purchaseResult =
+                await db.execute({
+                    sql: `
+                        SELECT *
+                        FROM purchases
+                        WHERE id = ?
+                    `,
+                    args: [purchaseId]
+                });
+
+            const purchase =
+                purchaseResult.rows[0];
 
             if (!purchase) {
                 return res.status(404).json({
@@ -524,27 +573,32 @@ router.get(
             // GET PURCHASE ITEMS
             // =================================================
 
-            const items = db.prepare(`
-                SELECT
-                    purchase_items.*,
-                    products.name AS product_name,
-                    products.barcode,
-                    products.unit
-                FROM purchase_items
+            const itemsResult =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            purchase_items.*,
+                            products.name AS product_name,
+                            products.barcode,
+                            products.unit
+                        FROM purchase_items
 
-                INNER JOIN products
-                    ON purchase_items.product_id = products.id
+                        INNER JOIN products
+                            ON purchase_items.product_id =
+                               products.id
 
-                WHERE purchase_items.purchase_id = ?
+                        WHERE purchase_items.purchase_id = ?
 
-                ORDER BY purchase_items.id ASC
-            `).all(purchaseId);
+                        ORDER BY purchase_items.id ASC
+                    `,
+                    args: [purchaseId]
+                });
 
             res.json({
                 success: true,
                 data: {
                     purchase,
-                    items
+                    items: itemsResult.rows
                 }
             });
 

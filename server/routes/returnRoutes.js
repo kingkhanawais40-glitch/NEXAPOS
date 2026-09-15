@@ -15,7 +15,7 @@ router.post(
     "/",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
 
             const {
@@ -34,6 +34,17 @@ router.post(
                 return res.status(400).json({
                     success: false,
                     message: "Invoice ID is required"
+                });
+            }
+
+            const invoiceId = Number(invoice_id);
+
+            if (!Number.isInteger(invoiceId) ||
+                invoiceId <= 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid invoice ID is required"
                 });
             }
 
@@ -75,11 +86,18 @@ router.post(
             // GET ORIGINAL INVOICE
             // =================================================
 
-            const invoice = db.prepare(`
-                SELECT *
-                FROM invoices
-                WHERE id = ?
-            `).get(invoice_id);
+            const invoiceResult =
+                await db.execute({
+                    sql: `
+                        SELECT *
+                        FROM invoices
+                        WHERE id = ?
+                    `,
+                    args: [invoiceId]
+                });
+
+            const invoice =
+                invoiceResult.rows[0];
 
 
             if (!invoice) {
@@ -91,48 +109,19 @@ router.post(
 
 
             // =================================================
-            // DATABASE TRANSACTION
+            // TURSO WRITE TRANSACTION
             // =================================================
 
-            const transaction = db.transaction(() => {
+            const transaction =
+                await db.transaction("write");
+
+            let returnData;
+
+            try {
 
                 let totalRefund = 0;
 
-
-                // =================================================
-                // PREPARE STATEMENTS
-                // =================================================
-
-                const getInvoiceItem = db.prepare(`
-                    SELECT *
-                    FROM invoice_items
-                    WHERE invoice_id = ?
-                    AND product_id = ?
-                `);
-
-
-                const getReturnedQuantity = db.prepare(`
-                    SELECT
-                        COALESCE(
-                            SUM(return_items.quantity),
-                            0
-                        ) AS returned_quantity
-
-                    FROM return_items
-
-                    INNER JOIN returns
-                        ON return_items.return_id = returns.id
-
-                    WHERE returns.invoice_id = ?
-                    AND return_items.product_id = ?
-                `);
-
-
-                const getProduct = db.prepare(`
-                    SELECT *
-                    FROM products
-                    WHERE id = ?
-                `);
+                const validatedItems = [];
 
 
                 // =================================================
@@ -144,6 +133,17 @@ router.post(
                     if (!item.product_id) {
                         throw new Error(
                             "Product ID is required"
+                        );
+                    }
+
+                    const productId =
+                        Number(item.product_id);
+
+                    if (!Number.isInteger(productId) ||
+                        productId <= 0
+                    ) {
+                        throw new Error(
+                            "Valid product ID is required"
                         );
                     }
 
@@ -167,16 +167,27 @@ router.post(
                     // CHECK PRODUCT WAS SOLD IN INVOICE
                     // ---------------------------------------------
 
+                    const invoiceItemResult =
+                        await transaction.execute({
+                            sql: `
+                                SELECT *
+                                FROM invoice_items
+                                WHERE invoice_id = ?
+                                AND product_id = ?
+                            `,
+                            args: [
+                                invoiceId,
+                                productId
+                            ]
+                        });
+
                     const invoiceItem =
-                        getInvoiceItem.get(
-                            invoice_id,
-                            item.product_id
-                        );
+                        invoiceItemResult.rows[0];
 
 
                     if (!invoiceItem) {
                         throw new Error(
-                            `Product ${item.product_id} was not sold in this invoice`
+                            `Product ${productId} was not sold in this invoice`
                         );
                     }
 
@@ -185,16 +196,39 @@ router.post(
                     // CHECK ALREADY RETURNED QUANTITY
                     // ---------------------------------------------
 
+                    const returnedResult =
+                        await transaction.execute({
+                            sql: `
+                                SELECT
+                                    COALESCE(
+                                        SUM(return_items.quantity),
+                                        0
+                                    ) AS returned_quantity
+
+                                FROM return_items
+
+                                INNER JOIN returns
+                                    ON return_items.return_id =
+                                       returns.id
+
+                                WHERE returns.invoice_id = ?
+                                AND return_items.product_id = ?
+                            `,
+                            args: [
+                                invoiceId,
+                                productId
+                            ]
+                        });
+
+
                     const returnedData =
-                        getReturnedQuantity.get(
-                            invoice_id,
-                            item.product_id
-                        );
+                        returnedResult.rows[0];
 
 
                     const alreadyReturned =
                         Number(
-                            returnedData.returned_quantity || 0
+                            returnedData ? returnedData.returned_quantity || 0 :
+                            0
                         );
 
 
@@ -214,7 +248,7 @@ router.post(
                         remainingQuantity
                     ) {
                         throw new Error(
-                            `Return quantity exceeds remaining sold quantity for product ${item.product_id}`
+                            `Return quantity exceeds remaining sold quantity for product ${productId}`
                         );
                     }
 
@@ -223,15 +257,24 @@ router.post(
                     // CHECK PRODUCT EXISTS
                     // ---------------------------------------------
 
+                    const productResult =
+                        await transaction.execute({
+                            sql: `
+                                SELECT *
+                                FROM products
+                                WHERE id = ?
+                            `,
+                            args: [productId]
+                        });
+
+
                     const product =
-                        getProduct.get(
-                            item.product_id
-                        );
+                        productResult.rows[0];
 
 
                     if (!product) {
                         throw new Error(
-                            `Product ${item.product_id} not found`
+                            `Product ${productId} not found`
                         );
                     }
 
@@ -250,14 +293,26 @@ router.post(
                         unitPrice < 0
                     ) {
                         throw new Error(
-                            `Invalid unit price for product ${item.product_id}`
+                            `Invalid unit price for product ${productId}`
                         );
                     }
 
 
-                    totalRefund +=
+                    const total =
                         requestedQuantity *
                         unitPrice;
+
+
+                    totalRefund += total;
+
+
+                    validatedItems.push({
+                        productId,
+                        quantity: requestedQuantity,
+                        unitPrice,
+                        total,
+                        productName: product.name
+                    });
                 }
 
 
@@ -288,30 +343,36 @@ router.post(
                 // CREATE RETURN RECORD
                 // =================================================
 
-                const returnResult = db.prepare(`
-                    INSERT INTO returns (
-                        return_number,
-                        invoice_id,
-                        customer_id,
-                        total_refund,
-                        refund_method,
-                        reason
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                `).run(
-                    returnNumber,
-                    invoice_id,
-                    invoice.customer_id || null,
-                    totalRefund,
-                    selectedRefundMethod,
-                    reason ?
-                    String(reason).trim() :
-                    null
-                );
+                const returnResult =
+                    await transaction.execute({
+                        sql: `
+                            INSERT INTO returns (
+                                return_number,
+                                invoice_id,
+                                customer_id,
+                                total_refund,
+                                refund_method,
+                                reason
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        `,
+                        args: [
+                            returnNumber,
+                            invoiceId,
+                            invoice.customer_id || null,
+                            totalRefund,
+                            selectedRefundMethod,
+                            reason ?
+                            String(reason).trim() :
+                            null
+                        ]
+                    });
 
 
                 const returnId =
-                    returnResult.lastInsertRowid;
+                    Number(
+                        returnResult.lastInsertRowid
+                    );
 
 
                 // =================================================
@@ -332,150 +393,135 @@ router.post(
 
                     if (ledgerCredit > 0) {
 
-                        db.prepare(`
-                            INSERT INTO customer_ledger (
-                                customer_id,
-                                invoice_id,
-                                transaction_type,
-                                amount,
-                                description
-                            )
-                            VALUES (?, ?, 'credit', ?, ?)
-                        `).run(
-                            invoice.customer_id,
-                            invoice_id,
-                            ledgerCredit,
-                            `Return adjustment - ${returnNumber}`
-                        );
+                        await transaction.execute({
+                            sql: `
+                                INSERT INTO customer_ledger (
+                                    customer_id,
+                                    invoice_id,
+                                    transaction_type,
+                                    amount,
+                                    description
+                                )
+                                VALUES (?, ?, 'credit', ?, ?)
+                            `,
+                            args: [
+                                invoice.customer_id,
+                                invoiceId,
+                                ledgerCredit,
+                                `Return adjustment - ${returnNumber}`
+                            ]
+                        });
                     }
                 }
-
-
-                // =================================================
-                // PREPARE RETURN ITEM STATEMENT
-                // =================================================
-
-                const insertReturnItem = db.prepare(`
-                    INSERT INTO return_items (
-                        return_id,
-                        product_id,
-                        quantity,
-                        unit_price,
-                        total
-                    )
-                    VALUES (?, ?, ?, ?, ?)
-                `);
-
-
-                // =================================================
-                // PREPARE STOCK UPDATE
-                // =================================================
-
-                const updateStock = db.prepare(`
-                    UPDATE products
-                    SET stock = stock + ?
-                    WHERE id = ?
-                `);
-
-
-                // =================================================
-                // PREPARE STOCK MOVEMENT
-                // =================================================
-
-                const insertMovement = db.prepare(`
-                    INSERT INTO stock_movements (
-                        product_id,
-                        type,
-                        quantity,
-                        reference_id,
-                        reason
-                    )
-                    VALUES (?, 'return', ?, ?, ?)
-                `);
 
 
                 // =================================================
                 // PROCESS RETURN ITEMS
                 // =================================================
 
-                for (const item of items) {
-
-                    const invoiceItem =
-                        getInvoiceItem.get(
-                            invoice_id,
-                            item.product_id
-                        );
-
-
-                    const quantity =
-                        Number(item.quantity);
-
-
-                    const unitPrice =
-                        Number(invoiceItem.unit_price);
-
-
-                    const total =
-                        quantity * unitPrice;
-
+                for (const item of validatedItems) {
 
                     // ---------------------------------------------
                     // INSERT RETURN ITEM
                     // ---------------------------------------------
 
-                    insertReturnItem.run(
-                        returnId,
-                        item.product_id,
-                        quantity,
-                        unitPrice,
-                        total
-                    );
+                    await transaction.execute({
+                        sql: `
+                            INSERT INTO return_items (
+                                return_id,
+                                product_id,
+                                quantity,
+                                unit_price,
+                                total
+                            )
+                            VALUES (?, ?, ?, ?, ?)
+                        `,
+                        args: [
+                            returnId,
+                            item.productId,
+                            item.quantity,
+                            item.unitPrice,
+                            item.total
+                        ]
+                    });
 
 
                     // ---------------------------------------------
                     // RESTORE STOCK
                     // ---------------------------------------------
 
-                    updateStock.run(
-                        quantity,
-                        item.product_id
-                    );
+                    const updateStockResult =
+                        await transaction.execute({
+                            sql: `
+                                UPDATE products
+                                SET stock = stock + ?
+                                WHERE id = ?
+                            `,
+                            args: [
+                                item.quantity,
+                                item.productId
+                            ]
+                        });
+
+
+                    if (
+                        Number(
+                            updateStockResult.rowsAffected
+                        ) === 0
+                    ) {
+                        throw new Error(
+                            `Failed to restore stock for ${item.productName}`
+                        );
+                    }
 
 
                     // ---------------------------------------------
                     // STOCK MOVEMENT
                     // ---------------------------------------------
 
-                    insertMovement.run(
-                        item.product_id,
-                        quantity,
-                        returnId,
-                        `Customer return - ${returnNumber}`
-                    );
+                    await transaction.execute({
+                        sql: `
+                            INSERT INTO stock_movements (
+                                product_id,
+                                type,
+                                quantity,
+                                reference_id,
+                                reason
+                            )
+                            VALUES (?, 'return', ?, ?, ?)
+                        `,
+                        args: [
+                            item.productId,
+                            item.quantity,
+                            returnId,
+                            `Customer return - ${returnNumber}`
+                        ]
+                    });
                 }
 
 
                 // =================================================
-                // RETURN RESULT
+                // COMMIT TRANSACTION
                 // =================================================
 
-                return {
+                await transaction.commit();
+
+
+                returnData = {
                     returnId,
                     returnNumber,
-                    invoiceId: invoice_id,
+                    invoiceId,
                     customerId: invoice.customer_id || null,
                     totalRefund,
                     refundMethod: selectedRefundMethod
                 };
-            });
 
+            } catch (transactionError) {
 
-            // =================================================
-            // EXECUTE TRANSACTION
-            // =================================================
+                await transaction.rollback();
 
-            const returnData =
-                transaction();
+                throw transactionError;
+            }
 
 
             // =================================================
@@ -513,30 +559,36 @@ router.get(
     "/",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
 
-            const returns = db.prepare(`
-                SELECT
-                    returns.*,
-                    invoices.invoice_number,
-                    customers.name AS customer_name
+            const result =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            returns.*,
+                            invoices.invoice_number,
+                            customers.name AS customer_name
 
-                FROM returns
+                        FROM returns
 
-                INNER JOIN invoices
-                    ON returns.invoice_id = invoices.id
+                        INNER JOIN invoices
+                            ON returns.invoice_id =
+                               invoices.id
 
-                LEFT JOIN customers
-                    ON returns.customer_id = customers.id
+                        LEFT JOIN customers
+                            ON returns.customer_id =
+                               customers.id
 
-                ORDER BY returns.id DESC
-            `).all();
+                        ORDER BY returns.id DESC
+                    `,
+                    args: []
+                });
 
 
             res.json({
                 success: true,
-                data: returns
+                data: result.rows
             });
 
         } catch (error) {
@@ -564,7 +616,7 @@ router.get(
     "/:id",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
 
             const returnId =
@@ -581,27 +633,41 @@ router.get(
             }
 
 
-            const returnRecord = db.prepare(`
-                SELECT
-                    returns.*,
+            // =================================================
+            // GET RETURN
+            // =================================================
 
-                    invoices.invoice_number,
-                    invoices.created_at AS invoice_date,
+            const returnResult =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            returns.*,
 
-                    customers.name AS customer_name,
-                    customers.phone AS customer_phone,
-                    customers.address AS customer_address
+                            invoices.invoice_number,
+                            invoices.created_at AS invoice_date,
 
-                FROM returns
+                            customers.name AS customer_name,
+                            customers.phone AS customer_phone,
+                            customers.address AS customer_address
 
-                INNER JOIN invoices
-                    ON returns.invoice_id = invoices.id
+                        FROM returns
 
-                LEFT JOIN customers
-                    ON returns.customer_id = customers.id
+                        INNER JOIN invoices
+                            ON returns.invoice_id =
+                               invoices.id
 
-                WHERE returns.id = ?
-            `).get(returnId);
+                        LEFT JOIN customers
+                            ON returns.customer_id =
+                               customers.id
+
+                        WHERE returns.id = ?
+                    `,
+                    args: [returnId]
+                });
+
+
+            const returnRecord =
+                returnResult.rows[0];
 
 
             if (!returnRecord) {
@@ -612,30 +678,39 @@ router.get(
             }
 
 
-            const items = db.prepare(`
-                SELECT
-                    return_items.*,
+            // =================================================
+            // GET RETURN ITEMS
+            // =================================================
 
-                    products.name AS product_name,
-                    products.barcode,
-                    products.unit
+            const itemsResult =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            return_items.*,
 
-                FROM return_items
+                            products.name AS product_name,
+                            products.barcode,
+                            products.unit
 
-                INNER JOIN products
-                    ON return_items.product_id = products.id
+                        FROM return_items
 
-                WHERE return_items.return_id = ?
+                        INNER JOIN products
+                            ON return_items.product_id =
+                               products.id
 
-                ORDER BY return_items.id ASC
-            `).all(returnId);
+                        WHERE return_items.return_id = ?
+
+                        ORDER BY return_items.id ASC
+                    `,
+                    args: [returnId]
+                });
 
 
             res.json({
                 success: true,
                 data: {
                     return: returnRecord,
-                    items
+                    items: itemsResult.rows
                 }
             });
 

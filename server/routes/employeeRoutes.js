@@ -14,7 +14,7 @@ router.post(
     "/",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 name,
@@ -44,7 +44,8 @@ router.post(
                 });
             }
 
-            const result = db.prepare(`
+            const result = await db.execute({
+                sql: `
 INSERT INTO employees(
     name,
     phone,
@@ -55,21 +56,23 @@ INSERT INTO employees(
     status
 )
 VALUES( ? , ? , ? , ? , ? , ? , ? )
-`).run(
-                name.trim(),
-                phone || null,
-                address || null,
-                role || "cashier",
-                Number(salary || 0),
-                joining_date || null,
-                status || "active"
-            );
+`,
+                args: [
+                    name.trim(),
+                    phone || null,
+                    address || null,
+                    role || "cashier",
+                    Number(salary || 0),
+                    joining_date || null,
+                    status || "active"
+                ]
+            });
 
             res.status(201).json({
                 success: true,
                 message: "Employee added successfully",
                 data: {
-                    id: result.lastInsertRowid
+                    id: Number(result.lastInsertRowid)
                 }
             });
 
@@ -95,18 +98,18 @@ router.get(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            let employees;
+            let result;
 
             if (req.user.role === "admin") {
-                employees = db.prepare(`
+                result = await db.execute(`
 SELECT *
     FROM employees
 ORDER BY id DESC
-    `).all();
+    `);
             } else {
-                employees = db.prepare(`
+                result = await db.execute(`
 SELECT
 id,
 name,
@@ -117,12 +120,12 @@ joining_date,
 status
 FROM employees
 ORDER BY id DESC
-    `).all();
+    `);
             }
 
             res.json({
                 success: true,
-                data: employees
+                data: result.rows
             });
 
         } catch (error) {
@@ -146,9 +149,9 @@ router.get(
     "/salary-payments",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const payments = db.prepare(`
+            const result = await db.execute(`
 SELECT
 esp.id,
     esp.employee_id,
@@ -163,11 +166,11 @@ esp.id,
 FROM employee_salary_payments esp
 INNER JOIN employees e
 ON esp.employee_id = e.id
-ORDER BY esp.id DESC `).all();
+ORDER BY esp.id DESC `);
 
             res.json({
                 success: true,
-                data: payments
+                data: result.rows
             });
 
         } catch (error) {
@@ -191,7 +194,7 @@ router.post(
     "/salary-payment",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 employee_id,
@@ -230,11 +233,16 @@ router.post(
                 });
             }
 
-            const employee = db.prepare(`
+            const employeeResult = await db.execute({
+                sql: `
 SELECT id, name
 FROM employees
 WHERE id = ?
-    `).get(employee_id);
+    `,
+                args: [employee_id]
+            });
+
+            const employee = employeeResult.rows[0];
 
             if (!employee) {
                 return res.status(404).json({
@@ -243,7 +251,8 @@ WHERE id = ?
                 });
             }
 
-            const result = db.prepare(`
+            const result = await db.execute({
+                sql: `
 INSERT INTO employee_salary_payments(
     employee_id,
     salary_month,
@@ -253,20 +262,22 @@ INSERT INTO employee_salary_payments(
     notes
 )
 VALUES( ? , ? , ? , ? , ? , ? )
-`).run(
-                employee_id,
-                salary_month,
-                Number(amount),
-                payment_date,
-                payment_method || "cash",
-                notes || null
-            );
+`,
+                args: [
+                    employee_id,
+                    salary_month,
+                    Number(amount),
+                    payment_date,
+                    payment_method || "cash",
+                    notes || null
+                ]
+            });
 
             res.status(201).json({
                 success: true,
                 message: "Salary payment recorded successfully",
                 data: {
-                    id: result.lastInsertRowid,
+                    id: Number(result.lastInsertRowid),
                     employee_id,
                     employee_name: employee.name
                 }
@@ -293,11 +304,12 @@ router.get(
     "/salary-summary",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const currentMonth = new Date().toISOString().slice(0, 7);
 
-            const employees = db.prepare(`
+            const result = await db.execute({
+                sql: `
 SELECT
 e.id,
     e.name,
@@ -330,7 +342,11 @@ e.id,
     e.salary,
     e.status
 
-ORDER BY e.id DESC `).all(currentMonth);
+ORDER BY e.id DESC `,
+                args: [currentMonth]
+            });
+
+            const employees = result.rows;
 
             const summary = employees.map(employee => {
                 const monthlySalary = Number(employee.salary || 0);
@@ -408,11 +424,11 @@ router.get(
     "/salary-stats",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const currentMonth = new Date().toISOString().slice(0, 7);
 
-            const stats = db.prepare(`
+            const statsResult = await db.execute(`
 SELECT
 COUNT( * ) AS total_employees,
 
@@ -430,9 +446,10 @@ COUNT( * ) AS total_employees,
     ) AS active_monthly_salary
 
 FROM employees
-    `).get();
+    `);
 
-            const paymentStats = db.prepare(`
+            const paymentStatsResult = await db.execute({
+                sql: `
 SELECT
 COUNT(DISTINCT employee_id) AS employees_paid,
 
@@ -443,16 +460,19 @@ COUNT(DISTINCT employee_id) AS employees_paid,
 
 FROM employee_salary_payments
 WHERE salary_month = ?
-    `).get(currentMonth);
+    `,
+                args: [currentMonth]
+            });
 
-            const activeEmployees = db.prepare(`
+            const activeEmployeesResult = await db.execute(`
 SELECT
 COUNT( * ) AS total
 FROM employees
 WHERE status = 'active'
-`).get();
+`);
 
-            const paidEmployees = db.prepare(`
+            const paidEmployeesResult = await db.execute({
+                sql: `
 SELECT
 COUNT( * ) AS total
 FROM employees e
@@ -460,9 +480,12 @@ WHERE e.status = 'active'
 AND EXISTS(
     SELECT 1 FROM employee_salary_payments esp WHERE esp.employee_id = e.id AND esp.salary_month = ?
 )
-`).get(currentMonth);
+`,
+                args: [currentMonth]
+            });
 
-            const partialEmployees = db.prepare(`
+            const partialEmployeesResult = await db.execute({
+                sql: `
 SELECT COUNT( * ) AS total
 FROM employees e
 WHERE e.status = 'active'
@@ -471,7 +494,15 @@ AND(
 ) > 0
 AND(
     SELECT COALESCE(SUM(esp.amount), 0) FROM employee_salary_payments esp WHERE esp.employee_id = e.id AND esp.salary_month = ?
-) < e.salary `).get(currentMonth, currentMonth);
+) < e.salary `,
+                args: [currentMonth, currentMonth]
+            });
+
+            const stats = statsResult.rows[0] || {};
+            const paymentStats = paymentStatsResult.rows[0] || {};
+            const activeEmployees = activeEmployeesResult.rows[0] || {};
+            const paidEmployees = paidEmployeesResult.rows[0] || {};
+            const partialEmployees = partialEmployeesResult.rows[0] || {};
 
             const unpaidEmployees = Math.max(
                 Number(activeEmployees.total || 0) -
@@ -494,15 +525,23 @@ AND(
 
                     active_employees: Number(activeEmployees.total || 0),
 
-                    total_monthly_salary: Number(stats.active_monthly_salary || 0),
+                    total_monthly_salary: Number(
+                        stats.active_monthly_salary || 0
+                    ),
 
-                    total_paid_this_month: Number(paymentStats.total_paid_this_month || 0),
+                    total_paid_this_month: Number(
+                        paymentStats.total_paid_this_month || 0
+                    ),
 
                     total_remaining_salary: totalRemainingSalary,
 
-                    paid_employees: Number(paidEmployees.total || 0),
+                    paid_employees: Number(
+                        paidEmployees.total || 0
+                    ),
 
-                    partial_paid_employees: Number(partialEmployees.total || 0),
+                    partial_paid_employees: Number(
+                        partialEmployees.total || 0
+                    ),
 
                     unpaid_employees: unpaidEmployees
                 }
@@ -529,9 +568,10 @@ router.get(
     "/:id/salary-payments",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const employee = db.prepare(`
+            const employeeResult = await db.execute({
+                sql: `
 SELECT
 id,
 name,
@@ -539,7 +579,11 @@ role,
 salary
 FROM employees
 WHERE id = ?
-    `).get(req.params.id);
+    `,
+                args: [req.params.id]
+            });
+
+            const employee = employeeResult.rows[0];
 
             if (!employee) {
                 return res.status(404).json({
@@ -548,7 +592,8 @@ WHERE id = ?
                 });
             }
 
-            const payments = db.prepare(`
+            const paymentsResult = await db.execute({
+                sql: `
 SELECT
 id,
 salary_month,
@@ -559,14 +604,23 @@ notes,
 created_at
 FROM employee_salary_payments
 WHERE employee_id = ?
-    ORDER BY payment_date DESC, id DESC `).all(req.params.id);
+    ORDER BY payment_date DESC, id DESC `,
+                args: [req.params.id]
+            });
 
-            const totalPaid = db.prepare(`
+            const payments = paymentsResult.rows;
+
+            const totalPaidResult = await db.execute({
+                sql: `
 SELECT
 COALESCE(SUM(amount), 0) AS total
 FROM employee_salary_payments
 WHERE employee_id = ?
-    `).get(req.params.id);
+    `,
+                args: [req.params.id]
+            });
+
+            const totalPaid = totalPaidResult.rows[0] || {};
 
             res.json({
                 success: true,
@@ -607,18 +661,22 @@ router.get(
     "/:id",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            let employee;
+            let result;
 
             if (req.user.role === "admin") {
-                employee = db.prepare(`
+                result = await db.execute({
+                    sql: `
 SELECT *
     FROM employees
 WHERE id = ?
-    `).get(req.params.id);
+    `,
+                    args: [req.params.id]
+                });
             } else {
-                employee = db.prepare(`
+                result = await db.execute({
+                    sql: `
 SELECT
 id,
 name,
@@ -629,8 +687,12 @@ joining_date,
 status
 FROM employees
 WHERE id = ?
-    `).get(req.params.id);
+    `,
+                    args: [req.params.id]
+                });
             }
+
+            const employee = result.rows[0];
 
             if (!employee) {
                 return res.status(404).json({
@@ -665,7 +727,7 @@ router.put(
     "/:id",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 name,
@@ -677,11 +739,16 @@ router.put(
                 status
             } = req.body;
 
-            const employee = db.prepare(`
+            const employeeResult = await db.execute({
+                sql: `
 SELECT *
     FROM employees
 WHERE id = ?
-    `).get(req.params.id);
+    `,
+                args: [req.params.id]
+            });
+
+            const employee = employeeResult.rows[0];
 
             if (!employee) {
                 return res.status(404).json({
@@ -701,7 +768,8 @@ WHERE id = ?
                 });
             }
 
-            db.prepare(`
+            await db.execute({
+                sql: `
 UPDATE employees
 SET
 name = ? ,
@@ -712,20 +780,22 @@ name = ? ,
     joining_date = ? ,
     status = ?
     WHERE id = ?
-    `).run(
-                name ? name.trim() : employee.name,
-                phone !== undefined ? phone : employee.phone,
-                address !== undefined ? address : employee.address,
-                role ? role : employee.role,
-                salary !== undefined ?
-                Number(salary) :
-                employee.salary,
-                joining_date !== undefined ?
-                joining_date :
-                employee.joining_date,
-                status ? status : employee.status,
-                req.params.id
-            );
+    `,
+                args: [
+                    name ? name.trim() : employee.name,
+                    phone !== undefined ? phone : employee.phone,
+                    address !== undefined ? address : employee.address,
+                    role ? role : employee.role,
+                    salary !== undefined ?
+                    Number(salary) :
+                    employee.salary,
+                    joining_date !== undefined ?
+                    joining_date :
+                    employee.joining_date,
+                    status ? status : employee.status,
+                    req.params.id
+                ]
+            });
 
             res.json({
                 success: true,
@@ -753,7 +823,7 @@ router.put(
     "/salary-payment/:id",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 salary_month,
@@ -763,11 +833,16 @@ router.put(
                 notes
             } = req.body;
 
-            const payment = db.prepare(`
+            const paymentResult = await db.execute({
+                sql: `
 SELECT *
     FROM employee_salary_payments
 WHERE id = ?
-    `).get(req.params.id);
+    `,
+                args: [req.params.id]
+            });
+
+            const payment = paymentResult.rows[0];
 
             if (!payment) {
                 return res.status(404).json({
@@ -786,7 +861,8 @@ WHERE id = ?
                 });
             }
 
-            db.prepare(`
+            await db.execute({
+                sql: `
 UPDATE employee_salary_payments
 SET
 salary_month = ? ,
@@ -795,29 +871,31 @@ salary_month = ? ,
     payment_method = ? ,
     notes = ?
     WHERE id = ?
-    `).run(
-                salary_month ?
-                salary_month :
-                payment.salary_month,
+    `,
+                args: [
+                    salary_month ?
+                    salary_month :
+                    payment.salary_month,
 
-                amount !== undefined ?
-                Number(amount) :
-                payment.amount,
+                    amount !== undefined ?
+                    Number(amount) :
+                    payment.amount,
 
-                payment_date ?
-                payment_date :
-                payment.payment_date,
+                    payment_date ?
+                    payment_date :
+                    payment.payment_date,
 
-                payment_method ?
-                payment_method :
-                payment.payment_method,
+                    payment_method ?
+                    payment_method :
+                    payment.payment_method,
 
-                notes !== undefined ?
-                notes :
-                payment.notes,
+                    notes !== undefined ?
+                    notes :
+                    payment.notes,
 
-                req.params.id
-            );
+                    req.params.id
+                ]
+            });
 
             res.json({
                 success: true,
@@ -845,13 +923,18 @@ router.delete(
     "/salary-payment/:id",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const payment = db.prepare(`
+            const paymentResult = await db.execute({
+                sql: `
 SELECT *
     FROM employee_salary_payments
 WHERE id = ?
-    `).get(req.params.id);
+    `,
+                args: [req.params.id]
+            });
+
+            const payment = paymentResult.rows[0];
 
             if (!payment) {
                 return res.status(404).json({
@@ -860,10 +943,13 @@ WHERE id = ?
                 });
             }
 
-            db.prepare(`
+            await db.execute({
+                sql: `
 DELETE FROM employee_salary_payments
 WHERE id = ?
-    `).run(req.params.id);
+    `,
+                args: [req.params.id]
+            });
 
             res.json({
                 success: true,
@@ -891,13 +977,18 @@ router.delete(
     "/:id",
     authMiddleware,
     roleMiddleware("admin"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const employee = db.prepare(`
+            const employeeResult = await db.execute({
+                sql: `
 SELECT *
     FROM employees
 WHERE id = ?
-    `).get(req.params.id);
+    `,
+                args: [req.params.id]
+            });
+
+            const employee = employeeResult.rows[0];
 
             if (!employee) {
                 return res.status(404).json({
@@ -906,10 +997,13 @@ WHERE id = ?
                 });
             }
 
-            db.prepare(`
+            await db.execute({
+                sql: `
 DELETE FROM employees
 WHERE id = ?
-    `).run(req.params.id);
+    `,
+                args: [req.params.id]
+            });
 
             res.json({
                 success: true,

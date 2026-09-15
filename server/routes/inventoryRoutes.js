@@ -13,37 +13,40 @@ router.get(
     "/",
     authMiddleware,
     roleMiddleware("admin", "manager", "cashier"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const products = db.prepare(`
-                SELECT
-                    products.id,
-                    products.name,
-                    products.barcode,
-                    products.unit,
-                    products.purchase_price,
-                    products.sale_price,
-                    products.stock,
-                    products.low_stock_limit,
-                    categories.name AS category_name,
+            const result = await db.execute({
+                sql: `
+                    SELECT
+                        products.id,
+                        products.name,
+                        products.barcode,
+                        products.unit,
+                        products.purchase_price,
+                        products.sale_price,
+                        products.stock,
+                        products.low_stock_limit,
+                        categories.name AS category_name,
 
-                    CASE
-                        WHEN products.stock <= products.low_stock_limit
-                        THEN 1
-                        ELSE 0
-                    END AS low_stock
+                        CASE
+                            WHEN products.stock <= products.low_stock_limit
+                            THEN 1
+                            ELSE 0
+                        END AS low_stock
 
-                FROM products
+                    FROM products
 
-                LEFT JOIN categories
-                    ON products.category_id = categories.id
+                    LEFT JOIN categories
+                        ON products.category_id = categories.id
 
-                ORDER BY products.name ASC
-            `).all();
+                    ORDER BY products.name ASC
+                `,
+                args: []
+            });
 
             res.json({
                 success: true,
-                data: products
+                data: result.rows
             });
 
         } catch (error) {
@@ -66,7 +69,7 @@ router.get(
     "/search",
     authMiddleware,
     roleMiddleware("admin", "manager", "cashier"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const { q } = req.query;
 
@@ -79,27 +82,30 @@ router.get(
 
             const searchQuery = q.trim();
 
-            const products = db.prepare(`
-                SELECT
-                    products.*,
-                    categories.name AS category_name
-                FROM products
+            const result = await db.execute({
+                sql: `
+                    SELECT
+                        products.*,
+                        categories.name AS category_name
+                    FROM products
 
-                LEFT JOIN categories
-                    ON products.category_id = categories.id
+                    LEFT JOIN categories
+                        ON products.category_id = categories.id
 
-                WHERE products.name LIKE ?
-                   OR products.barcode LIKE ?
+                    WHERE products.name LIKE ?
+                       OR products.barcode LIKE ?
 
-                ORDER BY products.name ASC
-            `).all(
-                `%${searchQuery}%`,
-                `%${searchQuery}%`
-            );
+                    ORDER BY products.name ASC
+                `,
+                args: [
+                    `%${searchQuery}%`,
+                    `%${searchQuery}%`
+                ]
+            });
 
             res.json({
                 success: true,
-                data: products
+                data: result.rows
             });
 
         } catch (error) {
@@ -122,25 +128,28 @@ router.get(
     "/low-stock",
     authMiddleware,
     roleMiddleware("admin", "manager", "cashier"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const products = db.prepare(`
-                SELECT
-                    products.*,
-                    categories.name AS category_name
-                FROM products
+            const result = await db.execute({
+                sql: `
+                    SELECT
+                        products.*,
+                        categories.name AS category_name
+                    FROM products
 
-                LEFT JOIN categories
-                    ON products.category_id = categories.id
+                    LEFT JOIN categories
+                        ON products.category_id = categories.id
 
-                WHERE products.stock <= products.low_stock_limit
+                    WHERE products.stock <= products.low_stock_limit
 
-                ORDER BY products.stock ASC
-            `).all();
+                    ORDER BY products.stock ASC
+                `,
+                args: []
+            });
 
             res.json({
                 success: true,
-                data: products
+                data: result.rows
             });
 
         } catch (error) {
@@ -164,7 +173,7 @@ router.post(
     "/adjust",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
             const {
                 product_id,
@@ -180,6 +189,17 @@ router.post(
                 return res.status(400).json({
                     success: false,
                     message: "Product ID is required"
+                });
+            }
+
+            const productId = Number(product_id);
+
+            if (!Number.isInteger(productId) ||
+                productId <= 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid product ID is required"
                 });
             }
 
@@ -210,15 +230,21 @@ router.post(
             // -----------------------------
             // Find product
             // -----------------------------
-            const product = db.prepare(`
-                SELECT
-                    id,
-                    name,
-                    barcode,
-                    stock
-                FROM products
-                WHERE id = ?
-            `).get(product_id);
+            const productResult = await db.execute({
+                sql: `
+                    SELECT
+                        id,
+                        name,
+                        barcode,
+                        stock
+                    FROM products
+                    WHERE id = ?
+                `,
+                args: [productId]
+            });
+
+            const product =
+                productResult.rows[0];
 
             if (!product) {
                 return res.status(404).json({
@@ -227,12 +253,15 @@ router.post(
                 });
             }
 
+            const currentStock =
+                Number(product.stock);
+
             // -----------------------------
             // Prevent negative stock
             // -----------------------------
             if (
                 type === "remove" &&
-                product.stock < qty
+                currentStock < qty
             ) {
                 return res.status(400).json({
                     success: false,
@@ -245,8 +274,8 @@ router.post(
             // -----------------------------
             const newStock =
                 type === "add" ?
-                product.stock + qty :
-                product.stock - qty;
+                currentStock + qty :
+                currentStock - qty;
 
             const adjustmentReason =
                 reason && reason.trim() ?
@@ -254,47 +283,72 @@ router.post(
                 "Manual stock adjustment";
 
             // =================================================
-            // TRANSACTION
+            // TURSO TRANSACTION
             // Stock update + movement record together
             // =================================================
-            const adjustStock = db.transaction(() => {
+            const transaction =
+                await db.transaction("write");
 
+            try {
+                // -----------------------------
                 // Update product stock
-                db.prepare(`
-                    UPDATE products
-                    SET stock = ?
-                    WHERE id = ?
-                `).run(
-                    newStock,
-                    product_id
-                );
+                // -----------------------------
+                const updateResult =
+                    await transaction.execute({
+                        sql: `
+                            UPDATE products
+                            SET stock = ?
+                            WHERE id = ?
+                        `,
+                        args: [
+                            newStock,
+                            productId
+                        ]
+                    });
 
+                if (
+                    Number(updateResult.rowsAffected) === 0
+                ) {
+                    throw new Error(
+                        "Failed to update product stock"
+                    );
+                }
+
+                // -----------------------------
                 // Record stock movement
-                db.prepare(`
-                    INSERT INTO stock_movements (
-                        product_id,
+                // -----------------------------
+                await transaction.execute({
+                    sql: `
+                        INSERT INTO stock_movements (
+                            product_id,
+                            type,
+                            quantity,
+                            reason
+                        )
+                        VALUES (?, ?, ?, ?)
+                    `,
+                    args: [
+                        productId,
                         type,
-                        quantity,
-                        reason
-                    )
-                    VALUES (?, ?, ?, ?)
-                `).run(
-                    product_id,
-                    type,
-                    qty,
-                    adjustmentReason
-                );
-            });
+                        qty,
+                        adjustmentReason
+                    ]
+                });
 
-            adjustStock();
+                await transaction.commit();
+
+            } catch (transactionError) {
+                await transaction.rollback();
+                throw transactionError;
+            }
 
             res.json({
                 success: true,
                 message: "Stock adjusted successfully",
                 data: {
-                    product_id,
+                    product_id: productId,
                     product_name: product.name,
-                    previous_stock: product.stock,
+                    previous_stock: currentStock,
                     adjustment: type === "add" ?
                         qty :
                         -qty,
@@ -304,7 +358,10 @@ router.post(
             });
 
         } catch (error) {
-            console.error("Adjust stock error:", error);
+            console.error(
+                "Adjust stock error:",
+                error
+            );
 
             res.status(500).json({
                 success: false,
@@ -324,17 +381,36 @@ router.get(
     "/movements/:productId",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
-            const product = db.prepare(`
-                SELECT
-                    id,
-                    name,
-                    barcode,
-                    stock
-                FROM products
-                WHERE id = ?
-            `).get(req.params.productId);
+            const productId =
+                Number(req.params.productId);
+
+            if (!Number.isInteger(productId) ||
+                productId <= 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid product ID"
+                });
+            }
+
+            const productResult =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            id,
+                            name,
+                            barcode,
+                            stock
+                        FROM products
+                        WHERE id = ?
+                    `,
+                    args: [productId]
+                });
+
+            const product =
+                productResult.rows[0];
 
             if (!product) {
                 return res.status(404).json({
@@ -343,30 +419,37 @@ router.get(
                 });
             }
 
-            const movements = db.prepare(`
-                SELECT
-                    stock_movements.*,
-                    products.name AS product_name
-                FROM stock_movements
+            const movementsResult =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            stock_movements.*,
+                            products.name AS product_name
+                        FROM stock_movements
 
-                INNER JOIN products
-                    ON stock_movements.product_id = products.id
+                        INNER JOIN products
+                            ON stock_movements.product_id = products.id
 
-                WHERE stock_movements.product_id = ?
+                        WHERE stock_movements.product_id = ?
 
-                ORDER BY stock_movements.id DESC
-            `).all(req.params.productId);
+                        ORDER BY stock_movements.id DESC
+                    `,
+                    args: [productId]
+                });
 
             res.json({
                 success: true,
                 data: {
                     product,
-                    movements
+                    movements: movementsResult.rows
                 }
             });
 
         } catch (error) {
-            console.error("Get stock movement history error:", error);
+            console.error(
+                "Get stock movement history error:",
+                error
+            );
 
             res.status(500).json({
                 success: false,

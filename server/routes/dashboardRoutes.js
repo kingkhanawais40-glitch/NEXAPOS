@@ -4,6 +4,7 @@ const router = express.Router();
 const db = require("../database/db");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
+
 // =====================================================
 // DASHBOARD SUMMARY
 // =====================================================
@@ -12,207 +13,230 @@ router.get(
     "/summary",
     authMiddleware,
     roleMiddleware("admin", "manager"),
-    (req, res) => {
+    async(req, res) => {
         try {
 
             // =====================================================
             // TODAY'S SALES
             // =====================================================
 
-            const todaySales = db.prepare(`
-            SELECT
-                COALESCE(SUM(grand_total), 0) AS total
-            FROM invoices
-            WHERE DATE(created_at) = DATE('now', 'localtime')
-        `).get();
+            const todaySalesResult = await db.execute(`
+                SELECT
+                    COALESCE(SUM(grand_total), 0) AS total
+                FROM invoices
+                WHERE DATE(created_at) = DATE('now', 'localtime')
+            `);
+
+            const todaySales = todaySalesResult.rows[0] || {};
 
 
             // =====================================================
             // TODAY'S INVOICES
             // =====================================================
 
-            const todayInvoices = db.prepare(`
-            SELECT
-                COUNT(*) AS total
-            FROM invoices
-            WHERE DATE(created_at) = DATE('now', 'localtime')
-        `).get();
+            const todayInvoicesResult = await db.execute(`
+                SELECT
+                    COUNT(*) AS total
+                FROM invoices
+                WHERE DATE(created_at) = DATE('now', 'localtime')
+            `);
+
+            const todayInvoices = todayInvoicesResult.rows[0] || {};
 
 
             // =====================================================
             // MONTHLY SALES
             // =====================================================
 
-            const monthSales = db.prepare(`
-            SELECT
-                COALESCE(SUM(grand_total), 0) AS total
-            FROM invoices
-            WHERE strftime('%Y-%m', created_at)
-                = strftime('%Y-%m', 'now', 'localtime')
-        `).get();
+            const monthSalesResult = await db.execute(`
+                SELECT
+                    COALESCE(SUM(grand_total), 0) AS total
+                FROM invoices
+                WHERE strftime('%Y-%m', created_at)
+                    = strftime('%Y-%m', 'now', 'localtime')
+            `);
+
+            const monthSales = monthSalesResult.rows[0] || {};
 
 
             // =====================================================
             // TOTAL PRODUCTS
             // =====================================================
 
-            const products = db.prepare(`
-            SELECT
-                COUNT(*) AS total
-            FROM products
-        `).get();
+            const productsResult = await db.execute(`
+                SELECT
+                    COUNT(*) AS total
+                FROM products
+            `);
+
+            const products = productsResult.rows[0] || {};
 
 
             // =====================================================
             // LOW STOCK PRODUCTS
             // =====================================================
 
-            const lowStock = db.prepare(`
-            SELECT
-                COUNT(*) AS total
-            FROM products
-            WHERE stock <= low_stock_limit
-        `).get();
+            const lowStockResult = await db.execute(`
+                SELECT
+                    COUNT(*) AS total
+                FROM products
+                WHERE stock <= low_stock_limit
+            `);
+
+            const lowStock = lowStockResult.rows[0] || {};
 
 
             // =====================================================
             // TOTAL CUSTOMERS
             // =====================================================
 
-            const customers = db.prepare(`
-            SELECT
-                COUNT(*) AS total
-            FROM customers
-        `).get();
+            const customersResult = await db.execute(`
+                SELECT
+                    COUNT(*) AS total
+                FROM customers
+            `);
+
+            const customers = customersResult.rows[0] || {};
 
 
             // =====================================================
             // TOTAL SUPPLIERS
             // =====================================================
 
-            const suppliers = db.prepare(`
-            SELECT
-                COUNT(*) AS total
-            FROM suppliers
-        `).get();
+            const suppliersResult = await db.execute(`
+                SELECT
+                    COUNT(*) AS total
+                FROM suppliers
+            `);
+
+            const suppliers = suppliersResult.rows[0] || {};
 
 
             // =====================================================
             // CUSTOMER TOTAL DUE
             // =====================================================
 
-            const customerDue = db.prepare(`
-            SELECT
-                COALESCE(
-                    (
-                        SELECT SUM(opening_balance)
-                        FROM customers
-                    ),
-                    0
-                )
-                +
-                COALESCE(
-                    (
-                        SELECT SUM(
-                            CASE
-                                WHEN transaction_type = 'debit'
-                                THEN amount
-                                ELSE -amount
-                            END
-                        )
-                        FROM customer_ledger
-                    ),
-                    0
-                ) AS total
-        `).get();
+            const customerDueResult = await db.execute(`
+                SELECT
+                    COALESCE(
+                        (
+                            SELECT SUM(opening_balance)
+                            FROM customers
+                        ),
+                        0
+                    )
+                    +
+                    COALESCE(
+                        (
+                            SELECT SUM(
+                                CASE
+                                    WHEN transaction_type = 'debit'
+                                    THEN amount
+                                    ELSE -amount
+                                END
+                            )
+                            FROM customer_ledger
+                        ),
+                        0
+                    ) AS total
+            `);
+
+            const customerDue = customerDueResult.rows[0] || {};
 
 
             // =====================================================
             // SUPPLIER TOTAL PAYABLE
             // =====================================================
 
-            const supplierPayable = db.prepare(`
-            SELECT
-                COALESCE(
-                    SUM(
-                        CASE
-                            WHEN balance > 0
-                            THEN balance
-                            ELSE 0
-                        END
-                    ),
-                    0
-                ) AS total
-            FROM (
+            const supplierPayableResult = await db.execute(`
                 SELECT
-                    suppliers.id,
-                    suppliers.opening_balance
-                    + COALESCE(
+                    COALESCE(
                         SUM(
                             CASE
-                                WHEN supplier_ledger.transaction_type = 'debit'
-                                THEN supplier_ledger.amount
-
-                                WHEN supplier_ledger.transaction_type = 'credit'
-                                THEN -supplier_ledger.amount
-
+                                WHEN balance > 0
+                                THEN balance
                                 ELSE 0
                             END
                         ),
                         0
-                    ) AS balance
+                    ) AS total
+                FROM (
+                    SELECT
+                        suppliers.id,
+                        suppliers.opening_balance
+                        + COALESCE(
+                            SUM(
+                                CASE
+                                    WHEN supplier_ledger.transaction_type = 'debit'
+                                    THEN supplier_ledger.amount
 
-                FROM suppliers
+                                    WHEN supplier_ledger.transaction_type = 'credit'
+                                    THEN -supplier_ledger.amount
 
-                LEFT JOIN supplier_ledger
-                    ON supplier_ledger.supplier_id = suppliers.id
+                                    ELSE 0
+                                END
+                            ),
+                            0
+                        ) AS balance
 
-                GROUP BY
-                    suppliers.id,
-                    suppliers.opening_balance
-            ) AS supplier_balances
-        `).get();
+                    FROM suppliers
+
+                    LEFT JOIN supplier_ledger
+                        ON supplier_ledger.supplier_id = suppliers.id
+
+                    GROUP BY
+                        suppliers.id,
+                        suppliers.opening_balance
+                ) AS supplier_balances
+            `);
+
+            const supplierPayable =
+                supplierPayableResult.rows[0] || {};
 
 
             // =====================================================
             // TODAY'S EXPENSES
             // =====================================================
 
-            const todayExpenses = db.prepare(`
-            SELECT
-                COALESCE(SUM(amount), 0) AS total
-            FROM expenses
-            WHERE expense_date = DATE('now', 'localtime')
-        `).get();
+            const todayExpensesResult = await db.execute(`
+                SELECT
+                    COALESCE(SUM(amount), 0) AS total
+                FROM expenses
+                WHERE expense_date = DATE('now', 'localtime')
+            `);
+
+            const todayExpenses = todayExpensesResult.rows[0] || {};
 
 
             // =====================================================
             // TODAY'S GROSS PROFIT
             // =====================================================
 
-            const todayProfit = db.prepare(`
-            SELECT
-                COALESCE(
-                    SUM(
-                        invoice_items.quantity *
-                        (
-                            invoice_items.unit_price -
-                            products.purchase_price
-                        )
-                    ),
-                    0
-                ) AS profit
-            FROM invoice_items
+            const todayProfitResult = await db.execute(`
+                SELECT
+                    COALESCE(
+                        SUM(
+                            invoice_items.quantity *
+                            (
+                                invoice_items.unit_price -
+                                products.purchase_price
+                            )
+                        ),
+                        0
+                    ) AS profit
+                FROM invoice_items
 
-            INNER JOIN invoices
-                ON invoice_items.invoice_id = invoices.id
+                INNER JOIN invoices
+                    ON invoice_items.invoice_id = invoices.id
 
-            INNER JOIN products
-                ON invoice_items.product_id = products.id
+                INNER JOIN products
+                    ON invoice_items.product_id = products.id
 
-            WHERE DATE(invoices.created_at)
-                = DATE('now', 'localtime')
-        `).get();
+                WHERE DATE(invoices.created_at)
+                    = DATE('now', 'localtime')
+            `);
+
+            const todayProfit = todayProfitResult.rows[0] || {};
 
 
             // =====================================================
@@ -248,11 +272,17 @@ router.get(
 
                     customer_due: Number(customerDue.total || 0),
 
-                    supplier_payable: Number(supplierPayable.total || 0),
+                    supplier_payable: Number(
+                        supplierPayable.total || 0
+                    ),
 
-                    today_expenses: Number(todayExpenses.total || 0),
+                    today_expenses: Number(
+                        todayExpenses.total || 0
+                    ),
 
-                    today_profit: Number(todayProfit.profit || 0),
+                    today_profit: Number(
+                        todayProfit.profit || 0
+                    ),
 
                     today_net_profit: todayNetProfit
                 }
@@ -260,14 +290,18 @@ router.get(
 
         } catch (error) {
 
-            console.error("Dashboard Summary Error:", error);
+            console.error(
+                "Dashboard Summary Error:",
+                error
+            );
 
             res.status(500).json({
                 success: false,
                 message: "Failed to load dashboard summary"
             });
         }
-    });
+    }
+);
 
 
 // =====================================================

@@ -66,13 +66,19 @@ router.post(
             // GET CURRENT ADMIN
             // ==========================================
 
-            const admin = db.prepare(`
-                SELECT id, username, password, role, status
-                FROM users
-                WHERE id = ?
-                  AND role = 'admin'
-                  AND status = 'active'
-            `).get(req.user.id);
+            const adminResult = await db.execute({
+                sql: `
+                    SELECT id, username, password, role, status
+                    FROM users
+                    WHERE id = ?
+                      AND role = 'admin'
+                      AND status = 'active'
+                `,
+                args: [req.user.id]
+            });
+
+            const admin =
+                adminResult.rows[0] || null;
 
             if (!admin) {
                 return res.status(401).json({
@@ -98,164 +104,163 @@ router.post(
             }
 
             // ==========================================
-            // ENABLE FOREIGN KEYS
+            // START TURSO WRITE TRANSACTION
             // ==========================================
 
-            db.exec("PRAGMA foreign_keys = ON");
+            const transaction =
+                await db.transaction("write");
 
-            // ==========================================
-            // START TRANSACTION
-            // ==========================================
-
-            const resetBusinessData = db.transaction(() => {
+            try {
 
                 // --------------------------------------
                 // 1. Employee Salary Payments
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM employee_salary_payments
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 2. Return Items
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM return_items
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 3. Returns
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM returns
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 4. Invoice Items
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM invoice_items
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 5. Customer Ledger
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM customer_ledger
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 6. Invoices
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM invoices
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 7. Stock Movements
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM stock_movements
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 8. Purchase Items
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM purchase_items
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 9. Supplier Ledger
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM supplier_ledger
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 10. Purchases
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM purchases
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 11. Expenses
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM expenses
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 12. Daily Closings
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM daily_closings
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 13. Employees
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM employees
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 14. Products
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM products
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 15. Categories
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM categories
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 16. Customers
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM customers
-                `).run();
+                `);
 
                 // --------------------------------------
                 // 17. Suppliers
                 // --------------------------------------
 
-                db.prepare(`
+                await transaction.execute(`
                     DELETE FROM suppliers
-                `).run();
+                `);
 
                 // --------------------------------------
                 // IMPORTANT:
                 // users and settings are NOT deleted.
                 // --------------------------------------
-            });
 
-            // ==========================================
-            // EXECUTE RESET
-            // ==========================================
+                await transaction.commit();
 
-            resetBusinessData();
+            } catch (transactionError) {
+
+                await transaction.rollback();
+
+                throw transactionError;
+            }
 
             // ==========================================
             // SUCCESS
