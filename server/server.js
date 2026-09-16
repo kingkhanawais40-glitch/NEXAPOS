@@ -76,7 +76,4 @@ app.get("/", (req, res) => {
         message: "General Store POS API is running!"
     });
 });
-
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+module.exports = app;

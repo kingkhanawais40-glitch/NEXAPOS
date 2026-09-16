@@ -161,6 +161,10 @@ function POS() {
           `/invoices/${invoiceId}`
         );
 
+        console.log("INVOICE RESPONSE:", response.data);
+
+setInvoice(response.data.data);
+
         setInvoice(response.data.data);
       } catch (error) {
         console.error(
@@ -305,9 +309,11 @@ function POS() {
         }
       );
 
-      setInvoiceId(
-        response.data.data.invoiceId
-      );
+      const createdInvoiceId = response.data.data.invoiceId;
+
+console.log("CREATED INVOICE ID:", createdInvoiceId);
+
+setInvoiceId(createdInvoiceId);
 
       setCart([]);
       setSelectedCustomer("");
