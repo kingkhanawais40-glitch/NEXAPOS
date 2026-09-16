@@ -77,3 +77,8 @@ app.get("/", (req, res) => {
     });
 });
 module.exports = app;
+app.listen(PORT, () => {
+    console.log(`
+NexaPOS server running on port $ { PORT }
+`);
+});

@@ -596,8 +596,6 @@ a {
 
 /* =========================================================
    QUICK ACTIONS
-   IMPORTANT:
-   Supports your current Dashboard.jsx
    ========================================================= */
 
 .quick-actions {
@@ -684,7 +682,7 @@ a {
 
 
 /* =========================================================
-   ANALYTICS CARDS
+   ANALYTICS
    ========================================================= */
 
 .dashboard-chart-section {
@@ -730,7 +728,7 @@ a {
 
 
 /* =========================================================
-   SALES / EXPENSE CHART
+   SALES CHART
    ========================================================= */
 
 .sales-chart {
@@ -973,23 +971,42 @@ tbody tr:last-child td {
 
 
 /* =========================================================
-   POS
+   POS PAGE
    ========================================================= */
 
 .pos-page {
     width: 100%;
+    position: relative;
 }
 
+
+/* =========================================================
+   POS CONTENT
+   IMPORTANT:
+   Invoice is NOT inside this grid.
+   ========================================================= */
+
 .pos-content {
+    width: 100%;
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(350px, 0.65fr);
     gap: 20px;
     align-items: start;
+    position: relative;
+    z-index: 1;
+    isolation: isolate;
 }
+
+
+/* =========================================================
+   BARCODE
+   ========================================================= */
 
 .pos-barcode-scan {
     grid-column: 1 / -1;
     margin-bottom: 4px;
+    position: relative;
+    z-index: 2;
 }
 
 .pos-barcode-scan input {
@@ -1015,22 +1032,24 @@ tbody tr:last-child td {
     font-weight: 650;
 }
 
-.pos-products,
-.pos-cart {
+
+/* =========================================================
+   POS PRODUCTS
+   ========================================================= */
+
+.pos-products {
+    grid-column: 1;
     background: var(--white);
     border: 1px solid var(--border);
     border-radius: 14px;
     padding: 20px;
     box-shadow: var(--shadow-sm);
-    grid-column: 1;
+    position: relative;
+    z-index: 2;
+    min-width: 0;
 }
 
-.pos-customer {
-    grid-column: 1;
-}
-
-.pos-products h2,
-.pos-cart h2 {
+.pos-products h2 {
     margin: 0 0 17px;
     color: var(--slate-900);
     font-size: 17px;
@@ -1076,11 +1095,60 @@ tbody tr:last-child td {
     transform: translateY(-1px);
 }
 
+
+/* =========================================================
+   POS CUSTOMER
+   ========================================================= */
+
+.pos-customer {
+    grid-column: 1;
+    position: relative;
+    z-index: 2;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+}
+
+.pos-customer h2 {
+    margin: 0 0 17px;
+    color: var(--slate-900);
+    font-size: 17px;
+    font-weight: 750;
+}
+
+
+/* =========================================================
+   POS CART
+   ========================================================= */
+
 .pos-cart {
+    grid-column: 2;
+    /*
+       IMPORTANT FIX:
+       Do NOT use grid-row: 1 / -1.
+       It was causing the cart to occupy the complete
+       height of the POS grid.
+    */
+    grid-row: auto;
     position: sticky;
     top: 94px;
-    grid-column: 2;
-    grid-row: 1 / -1;
+    align-self: start;
+    min-width: 0;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    z-index: 10;
+}
+
+.pos-cart h2 {
+    margin: 0 0 17px;
+    color: var(--slate-900);
+    font-size: 17px;
+    font-weight: 750;
 }
 
 .pos-cart>div {
@@ -1097,6 +1165,11 @@ tbody tr:last-child td {
     color: var(--slate-500);
     font-size: 12px;
 }
+
+
+/* =========================================================
+   CART TOTALS
+   ========================================================= */
 
 .cart-total,
 .cart-discount,
@@ -1117,6 +1190,267 @@ tbody tr:last-child td {
 .cart-grand-total strong {
     color: var(--navy-900);
     font-size: 18px;
+}
+
+
+/* =========================================================
+   PAYMENT
+   ========================================================= */
+
+.payment-section {
+    margin-top: 15px;
+}
+
+.payment-section label {
+    display: block;
+    margin: 10px 0 6px;
+    color: var(--slate-700);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.payment-section input,
+.payment-section select,
+.pos-customer select,
+.pos-customer input {
+    width: 100%;
+    min-height: 40px;
+    padding: 10px 12px;
+    border: 1px solid var(--slate-200);
+    border-radius: 8px;
+    background: var(--white);
+    color: var(--slate-800);
+    outline: none;
+}
+
+.payment-section input:focus,
+.payment-section select:focus,
+.pos-customer select:focus,
+.pos-customer input:focus {
+    border-color: var(--blue-400);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.08);
+}
+
+.payment-summary {
+    margin-top: 15px;
+    padding: 13px;
+    background: var(--blue-soft);
+    border: 1px solid var(--accent-100);
+    border-radius: 10px;
+}
+
+.payment-summary strong {
+    color: var(--blue-600);
+}
+
+
+/* =========================================================
+   POS CART MAIN BUTTON
+   ========================================================= */
+
+.pos-cart>button:last-child {
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 9px;
+    background: linear-gradient( 135deg, var(--blue-500), var(--blue-600));
+    color: var(--white);
+    font-size: 13px;
+    font-weight: 750;
+    box-shadow: 0 6px 15px rgba(124, 58, 237, 0.20);
+}
+
+.pos-cart>button:last-child:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+
+/* =========================================================
+   INVOICE PREVIEW
+   CRITICAL FIX
+   ========================================================= */
+
+
+/*
+   Invoice is a CHILD of .pos-page,
+   NOT a child of .pos-content.
+
+   It therefore gets its own normal document row
+   below the complete POS section.
+*/
+
+.pos-page>.invoice-preview {
+    display: block !important;
+    position: relative !important;
+    width: min(900px, calc(100% - 40px)) !important;
+    max-width: 900px !important;
+    height: auto !important;
+    min-height: 200px;
+    margin: 45px auto 60px !important;
+    padding: 30px !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    border: 1px solid #dddddd !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box !important;
+    float: none !important;
+    clear: both !important;
+    transform: none !important;
+    overflow: visible !important;
+    z-index: 20 !important;
+    isolation: isolate;
+}
+
+
+/* Invoice header */
+
+.invoice-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 30px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.invoice-header h2 {
+    margin: 0 0 8px;
+    color: #111111;
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.invoice-header p {
+    margin: 4px 0;
+    color: #555555;
+    font-size: 12px;
+}
+
+.invoice-meta {
+    text-align: right;
+}
+
+.invoice-meta p {
+    margin: 5px 0;
+}
+
+
+/* Invoice customer */
+
+.invoice-customer {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 16px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.invoice-customer p {
+    margin: 0;
+    color: #444444;
+    font-size: 12px;
+}
+
+
+/* Invoice table */
+
+.invoice-preview table {
+    width: 100%;
+    min-width: 0;
+    margin-top: 20px;
+    border-collapse: collapse;
+    background: #ffffff;
+}
+
+.invoice-preview thead {
+    background: #f8fafc;
+}
+
+.invoice-preview th,
+.invoice-preview td {
+    padding: 10px;
+    border-bottom: 1px solid #e5e7eb;
+    color: #333333;
+    font-size: 12px;
+}
+
+.invoice-preview th {
+    color: #555555;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.invoice-preview td {
+    color: #333333;
+}
+
+
+/* Invoice summary */
+
+.invoice-summary {
+    width: 100%;
+    max-width: 400px;
+    margin: 25px 0 0 auto;
+}
+
+.invoice-summary p {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    margin: 8px 0;
+    color: #333333;
+    font-size: 12px;
+}
+
+.invoice-grand-total {
+    padding-top: 10px;
+    border-top: 2px solid #111111;
+    font-size: 16px !important;
+    font-weight: 800;
+}
+
+
+/* Invoice footer */
+
+.invoice-footer-text {
+    margin: 30px 0 0;
+    text-align: center;
+    color: #444444;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+
+/* =========================================================
+   INVOICE PRINT ACTIONS
+   ========================================================= */
+
+.invoice-print-actions {
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid #eeeeee;
+}
+
+.invoice-print-actions button {
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: linear-gradient( 135deg, var(--blue-500), var(--blue-600));
+    color: var(--white);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.invoice-print-actions button:hover {
+    transform: translateY(-1px);
 }
 
 
@@ -1222,7 +1556,7 @@ tbody tr:last-child td {
 }
 
 .report-filters button.filter-active {
-    background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+    background: linear-gradient( 135deg, var(--blue-500), var(--blue-600));
     border-color: transparent;
     color: var(--white);
     box-shadow: 0 6px 14px rgba(124, 58, 237, 0.25);
@@ -1264,15 +1598,9 @@ tbody tr:last-child td {
     margin-bottom: 16px;
 }
 
-@media (max-width: 860px) {
-    .reports-two-col {
-        grid-template-columns: 1fr;
-    }
-}
-
 
 /* =========================================================
-   LEDGER / SUMMARY
+   LEDGER
    ========================================================= */
 
 .ledger-summary,
@@ -1326,37 +1654,6 @@ tbody tr:last-child td {
     background: #fafbfd;
     border: 1px solid var(--border);
     border-radius: 9px;
-}
-
-
-/* =========================================================
-   INVOICE PREVIEW
-   ========================================================= */
-
-.invoice-preview {
-    position: relative;
-    z-index: 10;
-    width: min(100%, 900px);
-    margin: 30px auto;
-    padding: 30px;
-    background: #ffffff;
-    color: #111111;
-    border: 1px solid #dddddd;
-    border-radius: 12px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-    box-sizing: border-box;
-}
-
-.invoice-print-actions {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 12px;
-    margin-top: 25px;
-}
-
-.invoice-print-actions button {
-    cursor: pointer;
 }
 
 
@@ -1415,15 +1712,15 @@ tbody tr:last-child td {
     .pos-content {
         grid-template-columns: 1fr;
     }
-    .pos-cart {
-        position: static;
-        grid-column: 1;
-        grid-row: auto;
-    }
     .pos-products,
     .pos-customer,
+    .pos-cart,
     .pos-barcode-scan {
         grid-column: 1;
+    }
+    .pos-cart {
+        position: static;
+        grid-row: auto;
     }
     .ledger-summary,
     .summary-grid {
@@ -1603,19 +1900,39 @@ tbody tr:last-child td {
         width: 100%;
     }
     .pos-products,
-    .pos-cart {
+    .pos-cart,
+    .pos-customer {
         padding: 16px;
     }
-    .invoice-preview {
-        padding: 18px;
-        border-radius: 10px;
+    .pos-page>.invoice-preview {
+        width: calc(100% - 20px) !important;
+        margin: 30px auto 40px !important;
+        padding: 18px !important;
+        border-radius: 10px !important;
     }
     .invoice-header {
         flex-direction: column;
     }
+    .invoice-meta {
+        text-align: left;
+    }
+    .invoice-customer {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .invoice-preview table {
+        display: block;
+        overflow-x: auto;
+    }
     .purchase-item,
     .invoice-item {
         grid-template-columns: 1fr;
+    }
+    .invoice-print-actions {
+        flex-direction: column;
+    }
+    .invoice-print-actions button {
+        width: 100%;
     }
 }
 
@@ -1664,6 +1981,10 @@ tbody tr:last-child td {
     td {
         padding: 10px 11px;
     }
+    .pos-page>.invoice-preview {
+        width: calc(100% - 10px) !important;
+        padding: 14px !important;
+    }
 }
 
 
@@ -1688,29 +2009,37 @@ tbody tr:last-child td {
     .invoice-preview * {
         visibility: visible;
     }
-    .invoice-preview {
+    /*
+       IMPORTANT:
+       On print, invoice becomes the ONLY visible document.
+    */
+    .pos-page>.invoice-preview {
+        display: block !important;
         position: absolute !important;
         left: 0 !important;
         top: 0 !important;
-        transform: none !important;
+        width: auto !important;
+        max-width: none !important;
         margin: 0 !important;
+        transform: none !important;
         background: #ffffff !important;
         border: none !important;
         border-radius: 0 !important;
         box-shadow: none !important;
         color: #000000 !important;
+        z-index: 999999 !important;
     }
-    /* ==========================================
-       A4 PRINT
-       ========================================== */
+    /* =====================================================
+       A4
+       ===================================================== */
     .invoice-preview.a4-receipt {
         width: 190mm !important;
         max-width: 190mm !important;
         padding: 10mm !important;
     }
-    /* ==========================================
-       THERMAL PRINT
-       ========================================== */
+    /* =====================================================
+       THERMAL
+       ===================================================== */
     .invoice-preview.thermal-receipt {
         width: 76mm !important;
         max-width: 76mm !important;
@@ -1731,6 +2060,7 @@ tbody tr:last-child td {
     }
     .invoice-preview.thermal-receipt table {
         width: 100% !important;
+        min-width: 0 !important;
     }
     .invoice-preview.thermal-receipt table th,
     .invoice-preview.thermal-receipt table td {
@@ -1741,7 +2071,9 @@ tbody tr:last-child td {
         max-width: 100% !important;
         margin-left: 0 !important;
     }
-    /* Hide buttons and application UI */
+    /* =====================================================
+       HIDE APPLICATION UI
+       ===================================================== */
     .invoice-preview button,
     .invoice-print-actions,
     .topbar,
@@ -1780,7 +2112,7 @@ textarea:focus-visible {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(160deg, var(--navy-950) 0%, var(--navy-900) 55%, var(--navy-800) 100%);
+    background: linear-gradient( 160deg, var(--navy-950) 0%, var(--navy-900) 55%, var(--navy-800) 100%);
     padding: 60px;
     position: relative;
     overflow: hidden;
@@ -1792,7 +2124,7 @@ textarea:focus-visible {
     width: 520px;
     height: 520px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(124, 58, 237, 0.25), transparent 70%);
+    background: radial-gradient( circle, rgba(124, 58, 237, 0.25), transparent 70%);
     top: -180px;
     right: -160px;
 }
@@ -1803,7 +2135,7 @@ textarea:focus-visible {
     width: 360px;
     height: 360px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(139, 92, 246, 0.18), transparent 70%);
+    background: radial-gradient( circle, rgba(139, 92, 246, 0.18), transparent 70%);
     bottom: -140px;
     left: -100px;
 }
@@ -1819,7 +2151,7 @@ textarea:focus-visible {
     width: 56px;
     height: 56px;
     border-radius: 14px;
-    background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+    background: linear-gradient( 135deg, var(--blue-500), var(--blue-600));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1944,7 +2276,7 @@ textarea:focus-visible {
     margin-top: 6px;
     border: none;
     border-radius: 10px;
-    background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+    background: linear-gradient( 135deg, var(--blue-500), var(--blue-600));
     color: var(--white);
     font-size: 14.5px;
     font-weight: 700;
@@ -1961,18 +2293,9 @@ textarea:focus-visible {
     opacity: 0.7;
 }
 
-@media (max-width: 860px) {
-    .login-brand-panel {
-        display: none;
-    }
-    .login-form-panel {
-        padding: 24px;
-    }
-}
-
 
 /* =========================================================
-   ALERTS (reusable success / error banners)
+   ALERTS
    ========================================================= */
 
 .alert {
@@ -2125,7 +2448,7 @@ textarea:focus-visible {
     padding: 11px 22px;
     border: none;
     border-radius: 10px;
-    background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+    background: linear-gradient( 135deg, var(--blue-500), var(--blue-600));
     color: var(--white);
     font-size: 14px;
     font-weight: 700;
@@ -2138,7 +2461,7 @@ textarea:focus-visible {
 
 
 /* =========================================================
-   TOAST NOTIFICATIONS
+   TOAST
    ========================================================= */
 
 .toast-stack {
@@ -2178,14 +2501,6 @@ textarea:focus-visible {
     to {
         opacity: 1;
         transform: translateY(0);
-    }
-}
-
-@media (max-width: 480px) {
-    .toast-stack {
-        left: 16px;
-        right: 16px;
-        max-width: none;
     }
 }
 
@@ -2247,6 +2562,36 @@ textarea:focus-visible {
 }
 
 .confirm-ok-btn {
-    background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+    background: linear-gradient( 135deg, var(--blue-500), var(--blue-600));
     color: var(--white);
+}
+
+
+/* =========================================================
+   LOGIN RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 860px) {
+    .login-brand-panel {
+        display: none;
+    }
+    .login-form-panel {
+        padding: 24px;
+    }
+    .reports-two-col {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* =========================================================
+   TOAST MOBILE
+   ========================================================= */
+
+@media (max-width: 480px) {
+    .toast-stack {
+        left: 16px;
+        right: 16px;
+        max-width: none;
+    }
 }

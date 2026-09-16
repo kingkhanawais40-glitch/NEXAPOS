@@ -2,38 +2,112 @@ import { useEffect, useState } from "react";
 import api from "../services/api";
 import { useNotification } from "../context/NotificationContext";
 
+/*
+  FORMAT INVOICE DATE/TIME
+
+  Backend already sends Pakistan time:
+  YYYY-MM-DD HH:mm:ss
+
+  Example:
+  2026-09-16 18:27:43
+
+  We display it directly without
+  applying another timezone conversion.
+*/
+
+const formatInvoiceDate = (value) => {
+  if (!value) return "-";
+
+  const raw = String(value).trim();
+
+  if (
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(
+      raw
+    )
+  ) {
+    const [datePart, timePart] =
+      raw.split(" ");
+
+    const [year, month, day] =
+      datePart.split("-");
+
+    const [hour, minute, second] =
+      timePart.split(":");
+
+    const date = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second)
+    );
+
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+
+    return date.toLocaleString("en-PK", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    });
+  }
+
+  return raw;
+};
+
 function POS() {
-  const { showSuccess, showError } = useNotification();
+  const { showSuccess, showError } =
+    useNotification();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState([]);
 
   const [customers, setCustomers] = useState([]);
-  const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [selectedCustomer, setSelectedCustomer] =
+    useState("");
 
-  const [showCustomerForm, setShowCustomerForm] = useState(false);
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
+  const [showCustomerForm, setShowCustomerForm] =
+    useState(false);
+  const [customerName, setCustomerName] =
+    useState("");
+  const [customerPhone, setCustomerPhone] =
+    useState("");
 
   const [discount, setDiscount] = useState(0);
   const [paidAmount, setPaidAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentMethod, setPaymentMethod] =
+    useState("cash");
 
-  const [invoiceId, setInvoiceId] = useState(null);
+  const [invoiceId, setInvoiceId] =
+    useState(null);
   const [invoice, setInvoice] = useState(null);
-  const [printMode, setPrintMode] = useState("a4");
+  const [printMode, setPrintMode] =
+    useState("a4");
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [barcodeInput, setBarcodeInput] = useState("");
-  const [barcodeError, setBarcodeError] = useState("");
+  const [searchTerm, setSearchTerm] =
+    useState("");
+  const [barcodeInput, setBarcodeInput] =
+    useState("");
+  const [barcodeError, setBarcodeError] =
+    useState("");
 
-  const [processingSale, setProcessingSale] = useState(false);
- const [settings, setSettings] = useState(null);
+  const [processingSale, setProcessingSale] =
+    useState(false);
+
+  const [settings, setSettings] =
+    useState(null);
 
   // ==========================================
   // ADD PRODUCT TO CART
   // ==========================================
+
   const addProductToCart = (product) => {
     if (product.stock <= 0) {
       showError("Product is out of stock");
@@ -43,12 +117,16 @@ function POS() {
     let added = true;
 
     setCart((currentCart) => {
-      const existingProduct = currentCart.find(
-        (item) => item.id === product.id
-      );
+      const existingProduct =
+        currentCart.find(
+          (item) => item.id === product.id
+        );
 
       if (existingProduct) {
-        if (existingProduct.quantity >= product.stock) {
+        if (
+          existingProduct.quantity >=
+          product.stock
+        ) {
           showError("Insufficient stock");
           added = false;
           return currentCart;
@@ -58,7 +136,8 @@ function POS() {
           item.id === product.id
             ? {
                 ...item,
-                quantity: item.quantity + 1,
+                quantity:
+                  item.quantity + 1,
               }
             : item
         );
@@ -79,6 +158,7 @@ function POS() {
   // ==========================================
   // BARCODE SCAN
   // ==========================================
+
   const handleBarcodeScan = (e) => {
     if (e.key !== "Enter") return;
 
@@ -89,31 +169,41 @@ function POS() {
     if (!code) return;
 
     const product = products.find(
-      (p) => p.barcode && p.barcode === code
+      (p) =>
+        p.barcode &&
+        p.barcode === code
     );
 
     if (!product) {
       setBarcodeError(
         `No product found with barcode "${code}"`
       );
+
       setBarcodeInput("");
+
       return;
     }
 
     setBarcodeError("");
+
     addProductToCart(product);
+
     setBarcodeInput("");
   };
 
   // ==========================================
   // FETCH PRODUCTS
   // ==========================================
+
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await api.get("/products");
+        const response =
+          await api.get("/products");
 
-        setProducts(response.data.data);
+        setProducts(
+          response.data.data
+        );
       } catch (error) {
         console.error(
           error.response?.data?.message ||
@@ -130,12 +220,16 @@ function POS() {
   // ==========================================
   // FETCH SETTINGS
   // ==========================================
+
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await api.get("/settings");
+        const response =
+          await api.get("/settings");
 
-        setSettings(response.data.data);
+        setSettings(
+          response.data.data
+        );
       } catch (error) {
         console.error(
           error.response?.data?.message ||
@@ -150,12 +244,16 @@ function POS() {
   // ==========================================
   // FETCH CUSTOMERS
   // ==========================================
+
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
-        const response = await api.get("/customers");
+        const response =
+          await api.get("/customers");
 
-        setCustomers(response.data.data);
+        setCustomers(
+          response.data.data
+        );
       } catch (error) {
         console.error(
           error.response?.data?.message ||
@@ -170,22 +268,39 @@ function POS() {
   // ==========================================
   // FETCH CREATED INVOICE
   // ==========================================
+
   useEffect(() => {
     if (!invoiceId) return;
 
     const fetchInvoice = async () => {
       try {
-        const response = await api.get(
-          `/invoices/${invoiceId}`
-        );
+        const response =
+          await api.get(
+            `/invoices/${invoiceId}`
+          );
 
         console.log(
           "INVOICE RESPONSE:",
           response.data
         );
 
-        // FIXED: only one setInvoice
-        setInvoice(response.data.data);
+        console.log(
+          "RAW CREATED AT:",
+          response.data.data?.invoice
+            ?.created_at
+        );
+
+        console.log(
+          "FORMATTED CREATED AT:",
+          formatInvoiceDate(
+            response.data.data?.invoice
+              ?.created_at
+          )
+        );
+
+        setInvoice(
+          response.data.data
+        );
       } catch (error) {
         console.error(
           error.response?.data?.message ||
@@ -200,6 +315,7 @@ function POS() {
   // ==========================================
   // CART CALCULATIONS
   // ==========================================
+
   const subtotal = cart.reduce(
     (total, item) =>
       total +
@@ -232,39 +348,49 @@ function POS() {
     taxableAmount + taxAmount;
 
   const paymentDifference = Math.abs(
-    Number(paidAmount) - grandTotal
+    Number(paidAmount) -
+      grandTotal
   );
 
   // ==========================================
   // ADD CUSTOMER
   // ==========================================
+
   const handleSaveCustomer = async () => {
     if (!customerName.trim()) {
-      showError("Customer name is required");
+      showError(
+        "Customer name is required"
+      );
+
       return;
     }
 
     try {
-      const response = await api.post(
-        "/customers",
-        {
-          name: customerName,
-          phone: customerPhone,
-        }
-      );
+      const response =
+        await api.post(
+          "/customers",
+          {
+            name: customerName,
+            phone: customerPhone,
+          }
+        );
 
       const newCustomer = {
         id:
           response.data.data?.id ||
           response.data.id,
+
         name: customerName,
+
         phone: customerPhone,
       };
 
-      setCustomers((currentCustomers) => [
-        ...currentCustomers,
-        newCustomer,
-      ]);
+      setCustomers(
+        (currentCustomers) => [
+          ...currentCustomers,
+          newCustomer,
+        ]
+      );
 
       setSelectedCustomer(
         String(newCustomer.id)
@@ -272,6 +398,7 @@ function POS() {
 
       setCustomerName("");
       setCustomerPhone("");
+
       setShowCustomerForm(false);
 
       showSuccess(
@@ -293,6 +420,7 @@ function POS() {
   // ==========================================
   // COMPLETE SALE
   // ==========================================
+
   const handleCompleteSale = async () => {
     if (cart.length === 0) {
       showError("Cart is empty");
@@ -303,38 +431,55 @@ function POS() {
       showError(
         "Discount cannot be greater than subtotal"
       );
+
       return;
     }
 
-    if (Number(paidAmount) > grandTotal) {
+    if (
+      Number(paidAmount) >
+      grandTotal
+    ) {
       showError(
         "Paid amount cannot be greater than grand total"
       );
+
       return;
     }
 
     setProcessingSale(true);
 
     try {
-      const response = await api.post(
-        "/invoices",
-        {
-          customer_id: selectedCustomer
-            ? Number(selectedCustomer)
-            : null,
+      const response =
+        await api.post(
+          "/invoices",
+          {
+            customer_id:
+              selectedCustomer
+                ? Number(
+                    selectedCustomer
+                  )
+                : null,
 
-          discount: finalDiscount,
+            discount:
+              finalDiscount,
 
-          paid_amount: Number(paidAmount),
+            paid_amount:
+              Number(paidAmount),
 
-          payment_method: paymentMethod,
+            payment_method:
+              paymentMethod,
 
-          items: cart.map((item) => ({
-            product_id: item.id,
-            quantity: item.quantity,
-          })),
-        }
-      );
+            items: cart.map(
+              (item) => ({
+                product_id:
+                  item.id,
+
+                quantity:
+                  item.quantity,
+              })
+            ),
+          }
+        );
 
       const createdInvoiceId =
         response.data.data.invoiceId;
@@ -344,27 +489,47 @@ function POS() {
         createdInvoiceId
       );
 
-      setInvoiceId(createdInvoiceId);
+      setInvoiceId(
+        createdInvoiceId
+      );
 
-      // Reset POS
+      // ========================================
+      // RESET POS
+      // ========================================
+
       setCart([]);
+
       setSelectedCustomer("");
+
       setDiscount(0);
+
       setPaidAmount(0);
+
       setPaymentMethod("cash");
+
       setSearchTerm("");
 
-      // Refresh products
+      // ========================================
+      // REFRESH PRODUCTS
+      // ========================================
+
       const productsResponse =
-        await api.get("/products");
+        await api.get(
+          "/products"
+        );
 
       setProducts(
         productsResponse.data.data
       );
 
-      // Refresh customers
+      // ========================================
+      // REFRESH CUSTOMERS
+      // ========================================
+
       const customersResponse =
-        await api.get("/customers");
+        await api.get(
+          "/customers"
+        );
 
       setCustomers(
         customersResponse.data.data
@@ -388,12 +553,14 @@ function POS() {
     }
   };
 
+  // ==========================================
+  // RENDER
+  // ==========================================
+
   return (
     <div className="pos-page">
 
-      {/* ======================================
-          PAGE HEADER
-      ====================================== */}
+      {/* PAGE HEADER */}
       <div className="page-header">
         <div>
           <h1>Point of Sale</h1>
@@ -404,31 +571,26 @@ function POS() {
         </div>
       </div>
 
-
-      {/* ======================================
-          POS CONTENT
-          IMPORTANT:
-          Invoice is NOT inside this div
-      ====================================== */}
       <div className="pos-content">
 
-        {/* ======================================
-            BARCODE SCAN
-        ====================================== */}
+        {/* BARCODE SCANNER */}
         <div className="pos-barcode-scan">
-
           <input
             type="text"
             placeholder="Scan barcode or type and press Enter..."
             value={barcodeInput}
             onChange={(e) => {
-              setBarcodeInput(e.target.value);
+              setBarcodeInput(
+                e.target.value
+              );
 
               if (barcodeError) {
                 setBarcodeError("");
               }
             }}
-            onKeyDown={handleBarcodeScan}
+            onKeyDown={
+              handleBarcodeScan
+            }
             autoFocus
           />
 
@@ -437,34 +599,33 @@ function POS() {
               {barcodeError}
             </p>
           )}
-
         </div>
 
-
-        {/* ======================================
-            PRODUCT SEARCH
-        ====================================== */}
+        {/* PRODUCT SEARCH */}
         <input
           type="text"
           placeholder="Search product by name or barcode..."
           value={searchTerm}
           onChange={(e) =>
-            setSearchTerm(e.target.value)
+            setSearchTerm(
+              e.target.value
+            )
           }
         />
 
-
-        {/* ======================================
-            PRODUCTS
-        ====================================== */}
+        {/* PRODUCTS */}
         <div className="pos-products">
 
           <h2>Products</h2>
 
           {loading ? (
-            <p>Loading products...</p>
+            <p>
+              Loading products...
+            </p>
           ) : products.length === 0 ? (
-            <p>No products found.</p>
+            <p>
+              No products found.
+            </p>
           ) : (
             products
               .filter(
@@ -502,7 +663,9 @@ function POS() {
                   <button
                     type="button"
                     onClick={() =>
-                      addProductToCart(product)
+                      addProductToCart(
+                        product
+                      )
                     }
                   >
                     Add
@@ -514,10 +677,7 @@ function POS() {
 
         </div>
 
-
-        {/* ======================================
-            CUSTOMER
-        ====================================== */}
+        {/* CUSTOMER */}
         <div className="pos-customer">
 
           <h2>Customer</h2>
@@ -525,7 +685,9 @@ function POS() {
           <button
             type="button"
             onClick={() =>
-              setShowCustomerForm(true)
+              setShowCustomerForm(
+                true
+              )
             }
           >
             + Add Customer
@@ -539,7 +701,6 @@ function POS() {
               )
             }
           >
-
             <option value="">
               Walk-in Customer
             </option>
@@ -548,7 +709,9 @@ function POS() {
               (customer) => (
                 <option
                   key={customer.id}
-                  value={customer.id}
+                  value={
+                    customer.id
+                  }
                 >
                   {customer.name}
 
@@ -557,7 +720,8 @@ function POS() {
                     : ""}
 
                   {` | Due: ${currency} ${
-                    customer.current_due ?? 0
+                    customer.current_due ??
+                    0
                   }`}
                 </option>
               )
@@ -565,31 +729,37 @@ function POS() {
 
           </select>
 
-
           {selectedCustomer && (
             <p>
-              Current Due: {currency}{" "}
+              Current Due:{" "}
+              {currency}{" "}
               {
                 customers.find(
                   (customer) =>
-                    String(customer.id) ===
-                    String(selectedCustomer)
+                    String(
+                      customer.id
+                    ) ===
+                    String(
+                      selectedCustomer
+                    )
                 )?.current_due ?? 0
               }
             </p>
           )}
 
-
-          {/* CUSTOMER FORM */}
           {showCustomerForm && (
             <div>
 
-              <h3>Add Customer</h3>
+              <h3>
+                Add Customer
+              </h3>
 
               <input
                 type="text"
                 placeholder="Customer name"
-                value={customerName}
+                value={
+                  customerName
+                }
                 onChange={(e) =>
                   setCustomerName(
                     e.target.value
@@ -600,7 +770,9 @@ function POS() {
               <input
                 type="text"
                 placeholder="Phone number"
-                value={customerPhone}
+                value={
+                  customerPhone
+                }
                 onChange={(e) =>
                   setCustomerPhone(
                     e.target.value
@@ -620,7 +792,9 @@ function POS() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowCustomerForm(false)
+                  setShowCustomerForm(
+                    false
+                  )
                 }
               >
                 Cancel
@@ -631,10 +805,7 @@ function POS() {
 
         </div>
 
-
-        {/* ======================================
-            CART
-        ====================================== */}
+        {/* CART */}
         <div className="pos-cart">
 
           <h2>Cart</h2>
@@ -648,9 +819,10 @@ function POS() {
             Clear Cart
           </button>
 
-
           {cart.length === 0 ? (
-            <p>Cart is empty.</p>
+            <p>
+              Cart is empty.
+            </p>
           ) : (
             cart.map((item) => (
               <div key={item.id}>
@@ -658,7 +830,6 @@ function POS() {
                 <strong>
                   {item.name}
                 </strong>
-
 
                 <div>
 
@@ -670,7 +841,9 @@ function POS() {
                         (currentCart) =>
                           currentCart
                             .map(
-                              (cartItem) =>
+                              (
+                                cartItem
+                              ) =>
                                 cartItem.id ===
                                 item.id
                                   ? {
@@ -682,7 +855,9 @@ function POS() {
                                   : cartItem
                             )
                             .filter(
-                              (cartItem) =>
+                              (
+                                cartItem
+                              ) =>
                                 cartItem.quantity >
                                 0
                             )
@@ -692,17 +867,16 @@ function POS() {
                     −
                   </button>
 
-
                   <span>
                     {" "}
                     {item.quantity}{" "}
                   </span>
 
-
                   {/* INCREASE */}
                   <button
                     type="button"
                     onClick={() => {
+
                       if (
                         item.quantity >=
                         item.stock
@@ -717,7 +891,9 @@ function POS() {
                       setCart(
                         (currentCart) =>
                           currentCart.map(
-                            (cartItem) =>
+                            (
+                              cartItem
+                            ) =>
                               cartItem.id ===
                               item.id
                                 ? {
@@ -729,11 +905,11 @@ function POS() {
                                 : cartItem
                           )
                       );
+
                     }}
                   >
                     +
                   </button>
-
 
                   {/* REMOVE */}
                   <button
@@ -742,7 +918,9 @@ function POS() {
                       setCart(
                         (currentCart) =>
                           currentCart.filter(
-                            (cartItem) =>
+                            (
+                              cartItem
+                            ) =>
                               cartItem.id !==
                               item.id
                           )
@@ -754,12 +932,15 @@ function POS() {
 
                 </div>
 
-
                 <span>
                   {currency}{" "}
                   {(
-                    Number(item.sale_price) *
-                    Number(item.quantity)
+                    Number(
+                      item.sale_price
+                    ) *
+                    Number(
+                      item.quantity
+                    )
                   ).toLocaleString(
                     undefined,
                     {
@@ -773,14 +954,12 @@ function POS() {
             ))
           )}
 
-
-          {/* ====================================
-              CART SUMMARY
-          ==================================== */}
+          {/* SUBTOTAL */}
           <div className="cart-total">
 
             <strong>
-              Subtotal: {currency}{" "}
+              Subtotal:{" "}
+              {currency}{" "}
               {subtotal.toLocaleString(
                 undefined,
                 {
@@ -791,7 +970,6 @@ function POS() {
             </strong>
 
           </div>
-
 
           {/* DISCOUNT */}
           <div className="cart-discount">
@@ -806,19 +984,21 @@ function POS() {
               value={discount}
               onChange={(e) =>
                 setDiscount(
-                  Number(e.target.value)
+                  Number(
+                    e.target.value
+                  )
                 )
               }
             />
 
           </div>
 
-
           {/* TAX */}
           <div className="cart-tax">
 
             <strong>
-              Tax ({taxRate}%): {currency}{" "}
+              Tax ({taxRate}%):{" "}
+              {currency}{" "}
               {taxAmount.toLocaleString(
                 undefined,
                 {
@@ -830,12 +1010,12 @@ function POS() {
 
           </div>
 
-
           {/* GRAND TOTAL */}
           <div className="cart-grand-total">
 
             <strong>
-              Grand Total: {currency}{" "}
+              Grand Total:{" "}
+              {currency}{" "}
               {grandTotal.toLocaleString(
                 undefined,
                 {
@@ -847,10 +1027,7 @@ function POS() {
 
           </div>
 
-
-          {/* ====================================
-              PAYMENT
-          ==================================== */}
+          {/* PAYMENT */}
           <div className="payment-section">
 
             <label>
@@ -863,11 +1040,12 @@ function POS() {
               value={paidAmount}
               onChange={(e) =>
                 setPaidAmount(
-                  Number(e.target.value)
+                  Number(
+                    e.target.value
+                  )
                 )
               }
             />
-
 
             <label>
               Payment Method
@@ -881,7 +1059,6 @@ function POS() {
                 )
               }
             >
-
               <option value="cash">
                 Cash
               </option>
@@ -897,22 +1074,20 @@ function POS() {
               <option value="jazzcash">
                 JazzCash
               </option>
-
             </select>
 
           </div>
 
-
-          {/* ====================================
-              PAYMENT SUMMARY
-          ==================================== */}
+          {/* PAYMENT SUMMARY */}
           <div className="payment-summary">
 
             <strong>
-              {paidAmount >= grandTotal
+              {paidAmount >=
+              grandTotal
                 ? "Change"
                 : "Due"}
-              : {currency}{" "}
+              :{" "}
+              {currency}{" "}
               {paymentDifference.toLocaleString(
                 undefined,
                 {
@@ -924,14 +1099,15 @@ function POS() {
 
           </div>
 
-
-          {/* ====================================
-              COMPLETE SALE
-          ==================================== */}
+          {/* COMPLETE SALE */}
           <button
             type="button"
-            disabled={processingSale}
-            onClick={handleCompleteSale}
+            disabled={
+              processingSale
+            }
+            onClick={
+              handleCompleteSale
+            }
           >
             {processingSale
               ? "Processing..."
@@ -942,15 +1118,10 @@ function POS() {
 
       </div>
 
+      {/* ========================================
+          INVOICE
+      ======================================== */}
 
-      {/* ==================================================
-          INVOICE PREVIEW
-
-          IMPORTANT:
-          This is OUTSIDE .pos-content
-
-          Is wajah se invoice cart ke peeche nahi aayega.
-      ================================================== */}
       {invoice && (
         <div
           className={`invoice-preview ${
@@ -960,9 +1131,7 @@ function POS() {
           }`}
         >
 
-          {/* ======================================
-              INVOICE HEADER
-          ====================================== */}
+          {/* INVOICE HEADER */}
           <div className="invoice-header">
 
             <div>
@@ -987,7 +1156,6 @@ function POS() {
 
             </div>
 
-
             <div className="invoice-meta">
 
               <p>
@@ -1000,14 +1168,15 @@ function POS() {
                 }
               </p>
 
+              {/* FIXED DATE/TIME */}
               <p>
                 <strong>
                   Date:
                 </strong>{" "}
-                {
+                {formatInvoiceDate(
                   invoice.invoice
                     .created_at
-                }
+                )}
               </p>
 
               <p>
@@ -1016,7 +1185,8 @@ function POS() {
                 </strong>{" "}
                 {
                   invoice.invoice
-                    .cashier_username || "-"
+                    .cashier_username ||
+                  "-"
                 }
               </p>
 
@@ -1024,10 +1194,7 @@ function POS() {
 
           </div>
 
-
-          {/* ======================================
-              CUSTOMER
-          ====================================== */}
+          {/* CUSTOMER */}
           <div className="invoice-customer">
 
             <p>
@@ -1054,25 +1221,38 @@ function POS() {
 
           </div>
 
-
-          {/* ======================================
-              INVOICE ITEMS
-          ====================================== */}
+          {/* ITEMS TABLE */}
           <table>
 
             <thead>
-
               <tr>
-                <th>Product</th>
-                <th>Barcode</th>
-                <th>Qty</th>
-                <th>Unit</th>
-                <th>Price</th>
-                <th>Total</th>
+
+                <th>
+                  Product
+                </th>
+
+                <th>
+                  Barcode
+                </th>
+
+                <th>
+                  Qty
+                </th>
+
+                <th>
+                  Unit
+                </th>
+
+                <th>
+                  Price
+                </th>
+
+                <th>
+                  Total
+                </th>
+
               </tr>
-
             </thead>
-
 
             <tbody>
 
@@ -1081,24 +1261,36 @@ function POS() {
                   <tr key={item.id}>
 
                     <td>
-                      {item.product_name}
+                      {
+                        item.product_name
+                      }
                     </td>
 
                     <td>
-                      {item.barcode || "-"}
+                      {
+                        item.barcode ||
+                        "-"
+                      }
                     </td>
 
                     <td>
-                      {item.quantity}
+                      {
+                        item.quantity
+                      }
                     </td>
 
                     <td>
-                      {item.unit || "-"}
+                      {
+                        item.unit ||
+                        "-"
+                      }
                     </td>
 
                     <td>
                       {currency}{" "}
-                      {item.unit_price}
+                      {
+                        item.unit_price
+                      }
                     </td>
 
                     <td>
@@ -1114,10 +1306,7 @@ function POS() {
 
           </table>
 
-
-          {/* ======================================
-              INVOICE SUMMARY
-          ====================================== */}
+          {/* INVOICE SUMMARY */}
           <div className="invoice-summary">
 
             <p>
@@ -1127,10 +1316,12 @@ function POS() {
 
               <span>
                 {currency}{" "}
-                {invoice.invoice.subtotal}
+                {
+                  invoice.invoice
+                    .subtotal
+                }
               </span>
             </p>
-
 
             <p>
               <span>
@@ -1139,26 +1330,31 @@ function POS() {
 
               <span>
                 {currency}{" "}
-                {invoice.invoice.discount}
+                {
+                  invoice.invoice
+                    .discount
+                }
               </span>
             </p>
-
 
             <p>
               <span>
                 Tax (
-                {invoice.invoice.tax_rate ||
+                {invoice.invoice
+                  .tax_rate ||
                   0}
                 %)
               </span>
 
               <span>
                 {currency}{" "}
-                {invoice.invoice.tax_amount ||
-                  0}
+                {
+                  invoice.invoice
+                    .tax_amount ||
+                  0
+                }
               </span>
             </p>
-
 
             <p className="invoice-grand-total">
 
@@ -1168,11 +1364,13 @@ function POS() {
 
               <span>
                 {currency}{" "}
-                {invoice.invoice.grand_total}
+                {
+                  invoice.invoice
+                    .grand_total
+                }
               </span>
 
             </p>
-
 
             <p>
               <span>
@@ -1181,10 +1379,12 @@ function POS() {
 
               <span>
                 {currency}{" "}
-                {invoice.invoice.paid_amount}
+                {
+                  invoice.invoice
+                    .paid_amount
+                }
               </span>
             </p>
-
 
             <p>
               <span>
@@ -1193,10 +1393,12 @@ function POS() {
 
               <span>
                 {currency}{" "}
-                {invoice.invoice.due_amount}
+                {
+                  invoice.invoice
+                    .due_amount
+                }
               </span>
             </p>
-
 
             <p>
               <span>
@@ -1204,10 +1406,12 @@ function POS() {
               </span>
 
               <span>
-                {invoice.invoice.payment_method}
+                {
+                  invoice.invoice
+                    .payment_method
+                }
               </span>
             </p>
-
 
             <p>
               <span>
@@ -1216,11 +1420,13 @@ function POS() {
 
               <span>
                 {Number(
-                  invoice.invoice.due_amount
+                  invoice.invoice
+                    .due_amount
                 ) === 0
                   ? "Paid"
                   : Number(
-                      invoice.invoice.paid_amount
+                      invoice.invoice
+                        .paid_amount
                     ) > 0
                   ? "Partial"
                   : "Due"}
@@ -1229,10 +1435,7 @@ function POS() {
 
           </div>
 
-
-          {/* ======================================
-              INVOICE FOOTER
-          ====================================== */}
+          {/* FOOTER */}
           <p className="invoice-footer-text">
 
             {settings?.invoice_footer ||
@@ -1240,34 +1443,36 @@ function POS() {
 
           </p>
 
-
-          {/* ======================================
-              PRINT BUTTONS
-          ====================================== */}
+          {/* PRINT ACTIONS */}
           <div className="invoice-print-actions">
 
             <button
               type="button"
               onClick={() => {
+
                 setPrintMode("a4");
 
                 setTimeout(() => {
                   window.print();
                 }, 300);
+
               }}
             >
               Print A4
             </button>
 
-
             <button
               type="button"
               onClick={() => {
-                setPrintMode("thermal");
+
+                setPrintMode(
+                  "thermal"
+                );
 
                 setTimeout(() => {
                   window.print();
                 }, 300);
+
               }}
             >
               Print Thermal Receipt
@@ -1283,4 +1488,3 @@ function POS() {
 }
 
 export default POS;
-

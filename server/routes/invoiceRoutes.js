@@ -16,6 +16,7 @@ router.post(
     async(req, res) => {
 
         try {
+
             const {
                 customer_id,
                 discount = 0,
@@ -69,6 +70,7 @@ router.post(
                 customer_id !== null &&
                 customer_id !== ""
             ) {
+
                 customerId = Number(customer_id);
 
                 if (!Number.isInteger(customerId) ||
@@ -79,14 +81,15 @@ router.post(
                     );
                 }
 
-                const customerResult = await db.execute({
-                    sql: `
-                        SELECT id
-                        FROM customers
-                        WHERE id = ?
-                    `,
-                    args: [customerId]
-                });
+                const customerResult =
+                    await db.execute({
+                        sql: `
+                            SELECT id
+                            FROM customers
+                            WHERE id = ?
+                        `,
+                        args: [customerId]
+                    });
 
                 const customer =
                     customerResult.rows[0];
@@ -101,14 +104,15 @@ router.post(
             // ==========================================
             // GET DEFAULT TAX
             // ==========================================
-            const settingsResult = await db.execute({
-                sql: `
-                    SELECT default_tax
-                    FROM settings
-                    WHERE id = 1
-                `,
-                args: []
-            });
+            const settingsResult =
+                await db.execute({
+                    sql: `
+                        SELECT default_tax
+                        FROM settings
+                        WHERE id = 1
+                    `,
+                    args: []
+                });
 
             const settings =
                 settingsResult.rows[0];
@@ -293,6 +297,13 @@ router.post(
 
             // ==========================================
             // CREATE INVOICE
+            //
+            // IMPORTANT:
+            // created_at database ka default timestamp
+            // automatically generate karega.
+            //
+            // Isko manually Date() se set nahi kar rahe.
+            // Frontend Asia/Karachi timezone mein display karega.
             // ==========================================
             const invoiceResult =
                 await db.execute({
@@ -328,7 +339,17 @@ router.post(
                 });
 
             const invoiceId =
-                Number(invoiceResult.lastInsertRowid);
+                Number(
+                    invoiceResult.lastInsertRowid
+                );
+
+            if (!Number.isInteger(invoiceId) ||
+                invoiceId <= 0
+            ) {
+                throw new Error(
+                    "Failed to create invoice"
+                );
+            }
 
             // ==========================================
             // CUSTOMER LEDGER
@@ -337,6 +358,7 @@ router.post(
                 customerId &&
                 dueAmount > 0
             ) {
+
                 await db.execute({
                     sql: `
                         INSERT INTO customer_ledger (
@@ -406,10 +428,12 @@ router.post(
                             UPDATE products
                             SET stock = stock - ?
                             WHERE id = ?
+                              AND stock >= ?
                         `,
                         args: [
                             quantity,
-                            productId
+                            productId,
+                            quantity
                         ]
                     });
 
@@ -450,6 +474,7 @@ router.post(
             res.status(201).json({
                 success: true,
                 message: "Invoice created successfully",
+
                 data: {
                     invoiceId,
                     invoiceNumber,
@@ -493,18 +518,20 @@ router.get(
 
         try {
 
-            const result = await db.execute({
-                sql: `
-                    SELECT
-                        invoices.*,
-                        customers.name AS customer_name
-                    FROM invoices
-                    LEFT JOIN customers
-                        ON invoices.customer_id = customers.id
-                    ORDER BY invoices.id DESC
-                `,
-                args: []
-            });
+            const result =
+                await db.execute({
+                    sql: `
+                        SELECT
+                            invoices.*,
+                            customers.name AS customer_name
+                        FROM invoices
+                        LEFT JOIN customers
+                            ON invoices.customer_id =
+                               customers.id
+                        ORDER BY invoices.id DESC
+                    `,
+                    args: []
+                });
 
             res.json({
                 success: true,
@@ -550,24 +577,38 @@ router.get(
                 });
             }
 
+
+            // ==========================================
+            // GET INVOICE
+            // ==========================================
+
             const invoiceResult =
                 await db.execute({
                     sql: `
-                        SELECT
-                            invoices.*,
-                            customers.name AS customer_name,
-                            customers.phone AS customer_phone,
-                            customers.address AS customer_address
-                        FROM invoices
-                        LEFT JOIN customers
-                            ON invoices.customer_id = customers.id
-                        WHERE invoices.id = ?
-                    `,
+            SELECT
+                invoices.*,
+
+                datetime(
+                    invoices.created_at,
+                    '+5 hours'
+                ) AS pakistan_created_at,
+
+                customers.name AS customer_name,
+                customers.phone AS customer_phone,
+                customers.address AS customer_address
+
+            FROM invoices
+
+            LEFT JOIN customers
+                ON invoices.customer_id =
+                   customers.id
+
+            WHERE invoices.id = ?
+        `,
                     args: [invoiceId]
                 });
 
-            const invoice =
-                invoiceResult.rows[0];
+            const invoice = invoiceResult.rows[0];
 
             if (!invoice) {
                 return res.status(404).json({
@@ -576,6 +617,19 @@ router.get(
                 });
             }
 
+            // Convert UTC database time to Pakistan time
+            if (invoice.pakistan_created_at) {
+                invoice.created_at =
+                    invoice.pakistan_created_at;
+
+                delete invoice.pakistan_created_at;
+            }
+
+
+
+            // ==========================================
+            // GET INVOICE ITEMS
+            // ==========================================
             const itemsResult =
                 await db.execute({
                     sql: `
@@ -586,15 +640,20 @@ router.get(
                             products.unit
                         FROM invoice_items
                         INNER JOIN products
-                            ON invoice_items.product_id = products.id
+                            ON invoice_items.product_id =
+                               products.id
                         WHERE invoice_items.invoice_id = ?
                         ORDER BY invoice_items.id ASC
                     `,
                     args: [invoiceId]
                 });
 
+            // ==========================================
+            // RETURN INVOICE
+            // ==========================================
             res.json({
                 success: true,
+
                 data: {
                     invoice,
                     items: itemsResult.rows
