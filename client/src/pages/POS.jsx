@@ -4,6 +4,7 @@ import { useNotification } from "../context/NotificationContext";
 
 function POS() {
   const { showSuccess, showError } = useNotification();
+
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState([]);
@@ -27,6 +28,12 @@ function POS() {
   const [barcodeInput, setBarcodeInput] = useState("");
   const [barcodeError, setBarcodeError] = useState("");
 
+  const [processingSale, setProcessingSale] = useState(false);
+ const [settings, setSettings] = useState(null);
+
+  // ==========================================
+  // ADD PRODUCT TO CART
+  // ==========================================
   const addProductToCart = (product) => {
     if (product.stock <= 0) {
       showError("Product is out of stock");
@@ -49,17 +56,29 @@ function POS() {
 
         return currentCart.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+              }
             : item
         );
       }
 
-      return [...currentCart, { ...product, quantity: 1 }];
+      return [
+        ...currentCart,
+        {
+          ...product,
+          quantity: 1,
+        },
+      ];
     });
 
     return added;
   };
 
+  // ==========================================
+  // BARCODE SCAN
+  // ==========================================
   const handleBarcodeScan = (e) => {
     if (e.key !== "Enter") return;
 
@@ -74,7 +93,9 @@ function POS() {
     );
 
     if (!product) {
-      setBarcodeError(`No product found with barcode "${code}"`);
+      setBarcodeError(
+        `No product found with barcode "${code}"`
+      );
       setBarcodeInput("");
       return;
     }
@@ -83,9 +104,6 @@ function POS() {
     addProductToCart(product);
     setBarcodeInput("");
   };
-  const [processingSale, setProcessingSale] = useState(false);
-
-  const [settings, setSettings] = useState(null);
 
   // ==========================================
   // FETCH PRODUCTS
@@ -161,10 +179,12 @@ function POS() {
           `/invoices/${invoiceId}`
         );
 
-        console.log("INVOICE RESPONSE:", response.data);
+        console.log(
+          "INVOICE RESPONSE:",
+          response.data
+        );
 
-setInvoice(response.data.data);
-
+        // FIXED: only one setInvoice
         setInvoice(response.data.data);
       } catch (error) {
         console.error(
@@ -180,10 +200,11 @@ setInvoice(response.data.data);
   // ==========================================
   // CART CALCULATIONS
   // ==========================================
-
   const subtotal = cart.reduce(
     (total, item) =>
-      total + Number(item.sale_price) * Number(item.quantity),
+      total +
+      Number(item.sale_price) *
+        Number(item.quantity),
     0
   );
 
@@ -201,7 +222,8 @@ setInvoice(response.data.data);
     settings?.default_tax || 0
   );
 
-  const currency = settings?.currency || "PKR";
+  const currency =
+    settings?.currency || "PKR";
 
   const taxAmount =
     (taxableAmount * taxRate) / 100;
@@ -223,10 +245,13 @@ setInvoice(response.data.data);
     }
 
     try {
-      const response = await api.post("/customers", {
-        name: customerName,
-        phone: customerPhone,
-      });
+      const response = await api.post(
+        "/customers",
+        {
+          name: customerName,
+          phone: customerPhone,
+        }
+      );
 
       const newCustomer = {
         id:
@@ -249,7 +274,9 @@ setInvoice(response.data.data);
       setCustomerPhone("");
       setShowCustomerForm(false);
 
-      showSuccess("Customer added successfully");
+      showSuccess(
+        "Customer added successfully"
+      );
     } catch (error) {
       console.error(
         "Customer error:",
@@ -309,12 +336,17 @@ setInvoice(response.data.data);
         }
       );
 
-      const createdInvoiceId = response.data.data.invoiceId;
+      const createdInvoiceId =
+        response.data.data.invoiceId;
 
-console.log("CREATED INVOICE ID:", createdInvoiceId);
+      console.log(
+        "CREATED INVOICE ID:",
+        createdInvoiceId
+      );
 
-setInvoiceId(createdInvoiceId);
+      setInvoiceId(createdInvoiceId);
 
+      // Reset POS
       setCart([]);
       setSelectedCustomer("");
       setDiscount(0);
@@ -322,6 +354,7 @@ setInvoiceId(createdInvoiceId);
       setPaymentMethod("cash");
       setSearchTerm("");
 
+      // Refresh products
       const productsResponse =
         await api.get("/products");
 
@@ -329,6 +362,7 @@ setInvoiceId(createdInvoiceId);
         productsResponse.data.data
       );
 
+      // Refresh customers
       const customersResponse =
         await api.get("/customers");
 
@@ -340,6 +374,11 @@ setInvoiceId(createdInvoiceId);
         `Sale completed successfully! Invoice: ${response.data.data.invoiceNumber}`
       );
     } catch (error) {
+      console.error(
+        "Sale error:",
+        error
+      );
+
       showError(
         error.response?.data?.message ||
           "Failed to create sale"
@@ -355,7 +394,6 @@ setInvoiceId(createdInvoiceId);
       {/* ======================================
           PAGE HEADER
       ====================================== */}
-
       <div className="page-header">
         <div>
           <h1>Point of Sale</h1>
@@ -366,33 +404,46 @@ setInvoiceId(createdInvoiceId);
         </div>
       </div>
 
+
+      {/* ======================================
+          POS CONTENT
+          IMPORTANT:
+          Invoice is NOT inside this div
+      ====================================== */}
       <div className="pos-content">
 
         {/* ======================================
             BARCODE SCAN
         ====================================== */}
-
         <div className="pos-barcode-scan">
+
           <input
             type="text"
             placeholder="Scan barcode or type and press Enter..."
             value={barcodeInput}
             onChange={(e) => {
               setBarcodeInput(e.target.value);
-              if (barcodeError) setBarcodeError("");
+
+              if (barcodeError) {
+                setBarcodeError("");
+              }
             }}
             onKeyDown={handleBarcodeScan}
             autoFocus
           />
+
           {barcodeError && (
-            <p className="pos-barcode-error">{barcodeError}</p>
+            <p className="pos-barcode-error">
+              {barcodeError}
+            </p>
           )}
+
         </div>
+
 
         {/* ======================================
             PRODUCT SEARCH
         ====================================== */}
-
         <input
           type="text"
           placeholder="Search product by name or barcode..."
@@ -402,10 +453,10 @@ setInvoiceId(createdInvoiceId);
           }
         />
 
+
         {/* ======================================
             PRODUCTS
         ====================================== */}
-
         <div className="pos-products">
 
           <h2>Products</h2>
@@ -449,6 +500,7 @@ setInvoiceId(createdInvoiceId);
                   </span>
 
                   <button
+                    type="button"
                     onClick={() =>
                       addProductToCart(product)
                     }
@@ -462,15 +514,16 @@ setInvoiceId(createdInvoiceId);
 
         </div>
 
+
         {/* ======================================
             CUSTOMER
         ====================================== */}
-
         <div className="pos-customer">
 
           <h2>Customer</h2>
 
           <button
+            type="button"
             onClick={() =>
               setShowCustomerForm(true)
             }
@@ -498,12 +551,13 @@ setInvoiceId(createdInvoiceId);
                   value={customer.id}
                 >
                   {customer.name}
+
                   {customer.phone
                     ? ` - ${customer.phone}`
                     : ""}
+
                   {` | Due: ${currency} ${
-                    customer.current_due ??
-                    0
+                    customer.current_due ?? 0
                   }`}
                 </option>
               )
@@ -511,17 +565,22 @@ setInvoiceId(createdInvoiceId);
 
           </select>
 
+
           {selectedCustomer && (
             <p>
               Current Due: {currency}{" "}
-              {customers.find(
-                (customer) =>
-                  String(customer.id) ===
-                  String(selectedCustomer)
-              )?.current_due ?? 0}
+              {
+                customers.find(
+                  (customer) =>
+                    String(customer.id) ===
+                    String(selectedCustomer)
+                )?.current_due ?? 0
+              }
             </p>
           )}
 
+
+          {/* CUSTOMER FORM */}
           {showCustomerForm && (
             <div>
 
@@ -550,12 +609,16 @@ setInvoiceId(createdInvoiceId);
               />
 
               <button
-                onClick={handleSaveCustomer}
+                type="button"
+                onClick={
+                  handleSaveCustomer
+                }
               >
                 Save Customer
               </button>
 
               <button
+                type="button"
                 onClick={() =>
                   setShowCustomerForm(false)
                 }
@@ -568,21 +631,23 @@ setInvoiceId(createdInvoiceId);
 
         </div>
 
+
         {/* ======================================
             CART
         ====================================== */}
-
         <div className="pos-cart">
 
           <h2>Cart</h2>
 
           <button
+            type="button"
             onClick={() =>
               setCart([])
             }
           >
             Clear Cart
           </button>
+
 
           {cart.length === 0 ? (
             <p>Cart is empty.</p>
@@ -594,9 +659,12 @@ setInvoiceId(createdInvoiceId);
                   {item.name}
                 </strong>
 
+
                 <div>
 
+                  {/* DECREASE */}
                   <button
+                    type="button"
                     onClick={() => {
                       setCart(
                         (currentCart) =>
@@ -624,12 +692,16 @@ setInvoiceId(createdInvoiceId);
                     −
                   </button>
 
+
                   <span>
                     {" "}
                     {item.quantity}{" "}
                   </span>
 
+
+                  {/* INCREASE */}
                   <button
+                    type="button"
                     onClick={() => {
                       if (
                         item.quantity >=
@@ -662,7 +734,10 @@ setInvoiceId(createdInvoiceId);
                     +
                   </button>
 
+
+                  {/* REMOVE */}
                   <button
+                    type="button"
                     onClick={() => {
                       setCart(
                         (currentCart) =>
@@ -679,33 +754,46 @@ setInvoiceId(createdInvoiceId);
 
                 </div>
 
+
                 <span>
                   {currency}{" "}
-                  {Number(
-                    item.sale_price
-                  ) *
-                    Number(
-                      item.quantity
-                    )}
+                  {(
+                    Number(item.sale_price) *
+                    Number(item.quantity)
+                  ).toLocaleString(
+                    undefined,
+                    {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    }
+                  )}
                 </span>
 
               </div>
             ))
           )}
 
+
           {/* ====================================
               CART SUMMARY
           ==================================== */}
-
           <div className="cart-total">
 
             <strong>
               Subtotal: {currency}{" "}
-              {subtotal.toLocaleString()}
+              {subtotal.toLocaleString(
+                undefined,
+                {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                }
+              )}
             </strong>
 
           </div>
 
+
+          {/* DISCOUNT */}
           <div className="cart-discount">
 
             <label>
@@ -725,8 +813,8 @@ setInvoiceId(createdInvoiceId);
 
           </div>
 
-          {/* TAX */}
 
+          {/* TAX */}
           <div className="cart-tax">
 
             <strong>
@@ -742,8 +830,8 @@ setInvoiceId(createdInvoiceId);
 
           </div>
 
-          {/* GRAND TOTAL */}
 
+          {/* GRAND TOTAL */}
           <div className="cart-grand-total">
 
             <strong>
@@ -759,10 +847,10 @@ setInvoiceId(createdInvoiceId);
 
           </div>
 
+
           {/* ====================================
               PAYMENT
           ==================================== */}
-
           <div className="payment-section">
 
             <label>
@@ -779,6 +867,7 @@ setInvoiceId(createdInvoiceId);
                 )
               }
             />
+
 
             <label>
               Payment Method
@@ -813,15 +902,14 @@ setInvoiceId(createdInvoiceId);
 
           </div>
 
+
           {/* ====================================
               PAYMENT SUMMARY
           ==================================== */}
-
           <div className="payment-summary">
 
             <strong>
-              {paidAmount >=
-              grandTotal
+              {paidAmount >= grandTotal
                 ? "Change"
                 : "Due"}
               : {currency}{" "}
@@ -836,11 +924,12 @@ setInvoiceId(createdInvoiceId);
 
           </div>
 
+
           {/* ====================================
               COMPLETE SALE
           ==================================== */}
-
           <button
+            type="button"
             disabled={processingSale}
             onClick={handleCompleteSale}
           >
@@ -851,232 +940,343 @@ setInvoiceId(createdInvoiceId);
 
         </div>
 
-        {/* ======================================
-            INVOICE PREVIEW
-        ====================================== */}
+      </div>
 
-        {invoice && (
-          <div
-            className={`invoice-preview ${
-              printMode === "thermal"
-                ? "thermal-receipt"
-                : "a4-receipt"
-            }`}
-          >
 
-            <div className="invoice-header">
+      {/* ==================================================
+          INVOICE PREVIEW
 
-              <div>
-                <h2>
-                  {settings?.store_name ||
-                    "General Store"}
-                </h2>
+          IMPORTANT:
+          This is OUTSIDE .pos-content
 
-                {settings?.store_phone && (
-                  <p>
-                    Phone:{" "}
-                    {settings.store_phone}
-                  </p>
-                )}
+          Is wajah se invoice cart ke peeche nahi aayega.
+      ================================================== */}
+      {invoice && (
+        <div
+          className={`invoice-preview ${
+            printMode === "thermal"
+              ? "thermal-receipt"
+              : "a4-receipt"
+          }`}
+        >
 
-                {settings?.store_address && (
-                  <p>
-                    {settings.store_address}
-                  </p>
-                )}
-              </div>
+          {/* ======================================
+              INVOICE HEADER
+          ====================================== */}
+          <div className="invoice-header">
 
-              <div className="invoice-meta">
+            <div>
+
+              <h2>
+                {settings?.store_name ||
+                  "General Store"}
+              </h2>
+
+              {settings?.store_phone && (
                 <p>
-                  <strong>Invoice #:</strong>{" "}
-                  {
-                    invoice.invoice
-                      .invoice_number
-                  }
+                  Phone:{" "}
+                  {settings.store_phone}
                 </p>
+              )}
 
+              {settings?.store_address && (
                 <p>
-                  <strong>Date:</strong>{" "}
-                  {invoice.invoice.created_at}
+                  {settings.store_address}
                 </p>
-
-                <p>
-                  <strong>Cashier:</strong>{" "}
-                  {invoice.invoice.cashier_username || "-"}
-                </p>
-              </div>
+              )}
 
             </div>
 
-            <div className="invoice-customer">
+
+            <div className="invoice-meta">
+
               <p>
-                <strong>Customer:</strong>{" "}
+                <strong>
+                  Invoice #:
+                </strong>{" "}
                 {
                   invoice.invoice
-                    .customer_name ||
-                  "Walk-in Customer"
+                    .invoice_number
                 }
               </p>
 
               <p>
-                <strong>Phone:</strong>{" "}
+                <strong>
+                  Date:
+                </strong>{" "}
                 {
                   invoice.invoice
-                    .customer_phone ||
-                  "N/A"
+                    .created_at
                 }
               </p>
-            </div>
-
-            <table>
-
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Barcode</th>
-                  <th>Qty</th>
-                  <th>Unit</th>
-                  <th>Price</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-
-              <tbody>
-
-                {invoice.items.map(
-                  (item) => (
-                    <tr key={item.id}>
-
-                      <td>
-                        {item.product_name}
-                      </td>
-
-                      <td>
-                        {item.barcode || "-"}
-                      </td>
-
-                      <td>
-                        {item.quantity}
-                      </td>
-
-                      <td>
-                        {item.unit || "-"}
-                      </td>
-
-                      <td>
-                        {currency}{" "}
-                        {item.unit_price}
-                      </td>
-
-                      <td>
-                        {currency}{" "}
-                        {item.total}
-                      </td>
-
-                    </tr>
-                  )
-                )}
-
-              </tbody>
-
-            </table>
-
-            <div className="invoice-summary">
 
               <p>
-                <span>Subtotal</span>
-                <span>
-                  {currency} {invoice.invoice.subtotal}
-                </span>
+                <strong>
+                  Cashier:
+                </strong>{" "}
+                {
+                  invoice.invoice
+                    .cashier_username || "-"
+                }
               </p>
 
-              <p>
-                <span>Discount</span>
-                <span>
-                  {currency} {invoice.invoice.discount}
-                </span>
-              </p>
-
-              <p>
-                <span>
-                  Tax ({invoice.invoice.tax_rate || 0}%)
-                </span>
-                <span>
-                  {currency}{" "}
-                  {invoice.invoice.tax_amount || 0}
-                </span>
-              </p>
-
-              <p className="invoice-grand-total">
-                <span>Grand Total</span>
-                <span>
-                  {currency} {invoice.invoice.grand_total}
-                </span>
-              </p>
-
-              <p>
-                <span>Paid</span>
-                <span>
-                  {currency} {invoice.invoice.paid_amount}
-                </span>
-              </p>
-
-              <p>
-                <span>Due</span>
-                <span>
-                  {currency} {invoice.invoice.due_amount}
-                </span>
-              </p>
-
-              <p>
-                <span>Payment Method</span>
-                <span>
-                  {invoice.invoice.payment_method}
-                </span>
-              </p>
-
-              <p>
-                <span>Status</span>
-                <span>
-                  {invoice.invoice.due_amount === 0
-                    ? "Paid"
-                    : invoice.invoice.paid_amount > 0
-                    ? "Partial"
-                    : "Due"}
-                </span>
-              </p>
-
-            </div>
-
-            <p className="invoice-footer-text">
-              {settings?.invoice_footer ||
-                "Thank you for shopping with us!"}
-            </p>
-
-            <div className="invoice-print-actions">
-              <button
-                onClick={() => {
-                  setPrintMode("a4");
-                  setTimeout(() => window.print(), 50);
-                }}
-              >
-                Print A4
-              </button>
-
-              <button
-                onClick={() => {
-                  setPrintMode("thermal");
-                  setTimeout(() => window.print(), 50);
-                }}
-              >
-                Print Thermal Receipt
-              </button>
             </div>
 
           </div>
-        )}
 
-      </div>
+
+          {/* ======================================
+              CUSTOMER
+          ====================================== */}
+          <div className="invoice-customer">
+
+            <p>
+              <strong>
+                Customer:
+              </strong>{" "}
+              {
+                invoice.invoice
+                  .customer_name ||
+                "Walk-in Customer"
+              }
+            </p>
+
+            <p>
+              <strong>
+                Phone:
+              </strong>{" "}
+              {
+                invoice.invoice
+                  .customer_phone ||
+                "N/A"
+              }
+            </p>
+
+          </div>
+
+
+          {/* ======================================
+              INVOICE ITEMS
+          ====================================== */}
+          <table>
+
+            <thead>
+
+              <tr>
+                <th>Product</th>
+                <th>Barcode</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th>Price</th>
+                <th>Total</th>
+              </tr>
+
+            </thead>
+
+
+            <tbody>
+
+              {invoice.items.map(
+                (item) => (
+                  <tr key={item.id}>
+
+                    <td>
+                      {item.product_name}
+                    </td>
+
+                    <td>
+                      {item.barcode || "-"}
+                    </td>
+
+                    <td>
+                      {item.quantity}
+                    </td>
+
+                    <td>
+                      {item.unit || "-"}
+                    </td>
+
+                    <td>
+                      {currency}{" "}
+                      {item.unit_price}
+                    </td>
+
+                    <td>
+                      {currency}{" "}
+                      {item.total}
+                    </td>
+
+                  </tr>
+                )
+              )}
+
+            </tbody>
+
+          </table>
+
+
+          {/* ======================================
+              INVOICE SUMMARY
+          ====================================== */}
+          <div className="invoice-summary">
+
+            <p>
+              <span>
+                Subtotal
+              </span>
+
+              <span>
+                {currency}{" "}
+                {invoice.invoice.subtotal}
+              </span>
+            </p>
+
+
+            <p>
+              <span>
+                Discount
+              </span>
+
+              <span>
+                {currency}{" "}
+                {invoice.invoice.discount}
+              </span>
+            </p>
+
+
+            <p>
+              <span>
+                Tax (
+                {invoice.invoice.tax_rate ||
+                  0}
+                %)
+              </span>
+
+              <span>
+                {currency}{" "}
+                {invoice.invoice.tax_amount ||
+                  0}
+              </span>
+            </p>
+
+
+            <p className="invoice-grand-total">
+
+              <span>
+                Grand Total
+              </span>
+
+              <span>
+                {currency}{" "}
+                {invoice.invoice.grand_total}
+              </span>
+
+            </p>
+
+
+            <p>
+              <span>
+                Paid
+              </span>
+
+              <span>
+                {currency}{" "}
+                {invoice.invoice.paid_amount}
+              </span>
+            </p>
+
+
+            <p>
+              <span>
+                Due
+              </span>
+
+              <span>
+                {currency}{" "}
+                {invoice.invoice.due_amount}
+              </span>
+            </p>
+
+
+            <p>
+              <span>
+                Payment Method
+              </span>
+
+              <span>
+                {invoice.invoice.payment_method}
+              </span>
+            </p>
+
+
+            <p>
+              <span>
+                Status
+              </span>
+
+              <span>
+                {Number(
+                  invoice.invoice.due_amount
+                ) === 0
+                  ? "Paid"
+                  : Number(
+                      invoice.invoice.paid_amount
+                    ) > 0
+                  ? "Partial"
+                  : "Due"}
+              </span>
+            </p>
+
+          </div>
+
+
+          {/* ======================================
+              INVOICE FOOTER
+          ====================================== */}
+          <p className="invoice-footer-text">
+
+            {settings?.invoice_footer ||
+              "Thank you for shopping with us!"}
+
+          </p>
+
+
+          {/* ======================================
+              PRINT BUTTONS
+          ====================================== */}
+          <div className="invoice-print-actions">
+
+            <button
+              type="button"
+              onClick={() => {
+                setPrintMode("a4");
+
+                setTimeout(() => {
+                  window.print();
+                }, 300);
+              }}
+            >
+              Print A4
+            </button>
+
+
+            <button
+              type="button"
+              onClick={() => {
+                setPrintMode("thermal");
+
+                setTimeout(() => {
+                  window.print();
+                }, 300);
+              }}
+            >
+              Print Thermal Receipt
+            </button>
+
+          </div>
+
+        </div>
+      )}
 
     </div>
   );
