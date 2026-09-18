@@ -1,5 +1,22 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  ArrowDownLeft,
+  ArrowUpRight,
+  CreditCard,
+  Truck,
+  Phone,
+  MapPin,
+  Wallet,
+  ReceiptText,
+  CalendarDays,
+  CheckCircle2,
+  Loader2,
+  Banknote,
+  Smartphone,
+} from "lucide-react";
+
 import api from "../services/api";
 import { useSettings } from "../context/SettingsContext";
 import { useNotification } from "../context/NotificationContext";
@@ -111,15 +128,16 @@ function SupplierLedger() {
   if (loading) {
     return (
       <div className="supplier-ledger-page">
-        <div className="page-header">
-          <div>
-            <h1>Supplier Ledger</h1>
-            <p>Loading supplier information...</p>
+        <div className="supplier-ledger-loading">
+          <div className="supplier-ledger-loading-icon">
+            <Loader2 size={28} />
           </div>
-        </div>
 
-        <div className="suppliers-card">
-          <p>Loading...</p>
+          <h3>Loading Supplier Ledger</h3>
+
+          <p>
+            Please wait while the account information is loaded.
+          </p>
         </div>
       </div>
     );
@@ -128,136 +146,312 @@ function SupplierLedger() {
   if (!supplier) {
     return (
       <div className="supplier-ledger-page">
-        <div className="page-header">
-          <div>
-            <h1>Supplier Ledger</h1>
-            <p>Supplier could not be found.</p>
+        <div className="supplier-ledger-empty">
+          <div className="supplier-ledger-empty-icon">
+            <Truck size={30} />
           </div>
-        </div>
 
-        <div className="suppliers-card">
-          <p>Supplier not found.</p>
+          <h3>Supplier Ledger Not Found</h3>
+
+          <p>
+            The requested supplier account could not be loaded.
+          </p>
 
           <button
-            className="secondary-btn"
+            className="supplier-ledger-back-btn"
             onClick={() => navigate("/suppliers")}
           >
-            ← Back to Suppliers
+            <ArrowLeft size={17} />
+            Back to Suppliers
           </button>
         </div>
       </div>
     );
   }
 
+  const formatMoney = (value) => {
+    return `${currency} ${Number(value || 0).toLocaleString()}`;
+  };
+
+  const formatPaymentMethod = (method) => {
+    if (!method) return "-";
+
+    const labels = {
+      cash: "Cash",
+      bank: "Bank",
+      easypaisa: "Easypaisa",
+      jazzcash: "JazzCash",
+    };
+
+    return labels[method] || method;
+  };
+
+  const getPaymentIcon = (method) => {
+    if (method === "cash") {
+      return <Banknote size={15} />;
+    }
+
+    if (
+      method === "easypaisa" ||
+      method === "jazzcash"
+    ) {
+      return <Smartphone size={15} />;
+    }
+
+    return <CreditCard size={15} />;
+  };
+
   return (
     <div className="supplier-ledger-page">
 
       {/* HEADER */}
-      <div className="page-header">
-        <div>
-          <h1>Supplier Ledger</h1>
 
-          <p>
-            View supplier transactions and outstanding
-            payable.
-          </p>
+      <div className="supplier-ledger-header">
+
+        <div className="supplier-ledger-header-left">
+
+          <button
+            className="supplier-ledger-back-icon"
+            onClick={() => navigate("/suppliers")}
+            title="Back to Suppliers"
+          >
+            <ArrowLeft size={19} />
+          </button>
+
+          <div className="supplier-ledger-heading">
+
+            <div className="supplier-ledger-eyebrow">
+              <ReceiptText size={14} />
+              SUPPLIER ACCOUNT
+            </div>
+
+            <h1>Supplier Ledger</h1>
+
+            <div className="supplier-ledger-meta">
+
+              <span className="supplier-ledger-name">
+                <Truck size={15} />
+                {supplier.name}
+              </span>
+
+              {supplier.phone && (
+                <span className="supplier-ledger-phone">
+                  <Phone size={14} />
+                  {supplier.phone}
+                </span>
+              )}
+
+            </div>
+
+          </div>
+
         </div>
 
-        <button
-          className="secondary-btn"
-          onClick={() => navigate("/suppliers")}
-        >
-          ← Back to Suppliers
-        </button>
+        <div className="supplier-ledger-header-badge">
+          <Wallet size={17} />
+          Payable Statement
+        </div>
+
       </div>
 
       {/* SUPPLIER INFORMATION */}
-      <div className="suppliers-card">
-        <h2>{supplier.name}</h2>
 
-        <div className="form-grid">
-          <div>
-            <strong>Phone</strong>
-            <p>{supplier.phone || "-"}</p>
+      <div className="supplier-info-card">
+
+        <div className="supplier-info-main">
+
+          <div className="supplier-info-avatar">
+            <Truck size={22} />
           </div>
 
           <div>
-            <strong>Address</strong>
-            <p>{supplier.address || "-"}</p>
+            <span className="supplier-info-label">
+              Supplier
+            </span>
+
+            <h2>{supplier.name}</h2>
           </div>
+
         </div>
+
+        <div className="supplier-info-details">
+
+          <div className="supplier-info-detail">
+
+            <Phone size={16} />
+
+            <div>
+              <span>Phone</span>
+              <strong>
+                {supplier.phone || "Not provided"}
+              </strong>
+            </div>
+
+          </div>
+
+          <div className="supplier-info-detail">
+
+            <MapPin size={16} />
+
+            <div>
+              <span>Address</span>
+              <strong>
+                {supplier.address || "Not provided"}
+              </strong>
+            </div>
+
+          </div>
+
+        </div>
+
       </div>
 
       {/* SUMMARY */}
+
       {summary && (
-        <div className="dashboard-grid">
+        <div className="supplier-ledger-summary-grid">
 
-          <div className="dashboard-card">
-            <div>
-              <p>Opening Balance</p>
+          <div className="supplier-ledger-summary-card opening">
 
-              <h2>
-                {currency}{" "}
-                {Number(
-                  summary.opening_balance || 0
-                ).toLocaleString()}
-              </h2>
+            <div className="supplier-ledger-summary-top">
+
+              <div className="supplier-ledger-summary-icon">
+                <Wallet size={20} />
+              </div>
+
+              <span>Opening Balance</span>
+
             </div>
+
+            <div className="supplier-ledger-summary-value">
+              {formatMoney(summary.opening_balance)}
+            </div>
+
+            <div className="supplier-ledger-summary-footer">
+              Starting supplier balance
+            </div>
+
           </div>
 
-          <div className="dashboard-card">
-            <div>
-              <p>Total Debit</p>
+          <div className="supplier-ledger-summary-card debit">
 
-              <h2>
-                {currency}{" "}
-                {Number(
-                  summary.total_debit || 0
-                ).toLocaleString()}
-              </h2>
+            <div className="supplier-ledger-summary-top">
+
+              <div className="supplier-ledger-summary-icon">
+                <ArrowUpRight size={20} />
+              </div>
+
+              <span>Total Debit</span>
+
             </div>
+
+            <div className="supplier-ledger-summary-value">
+              {formatMoney(summary.total_debit)}
+            </div>
+
+            <div className="supplier-ledger-summary-footer">
+              Purchases and payable added
+            </div>
+
           </div>
 
-          <div className="dashboard-card">
-            <div>
-              <p>Total Credit</p>
+          <div className="supplier-ledger-summary-card credit">
 
-              <h2>
-                {currency}{" "}
-                {Number(
-                  summary.total_credit || 0
-                ).toLocaleString()}
-              </h2>
+            <div className="supplier-ledger-summary-top">
+
+              <div className="supplier-ledger-summary-icon">
+                <ArrowDownLeft size={20} />
+              </div>
+
+              <span>Total Credit</span>
+
             </div>
+
+            <div className="supplier-ledger-summary-value">
+              {formatMoney(summary.total_credit)}
+            </div>
+
+            <div className="supplier-ledger-summary-footer">
+              Payments made to supplier
+            </div>
+
           </div>
 
-          <div className="dashboard-card">
-            <div>
-              <p>Current Payable</p>
+          <div className="supplier-ledger-summary-card payable">
 
-              <h2>
-                {currency}{" "}
-                {Number(
-                  summary.current_payable || 0
-                ).toLocaleString()}
-              </h2>
+            <div className="supplier-ledger-summary-top">
+
+              <div className="supplier-ledger-summary-icon">
+                <CreditCard size={20} />
+              </div>
+
+              <span>Current Payable</span>
+
             </div>
+
+            <div className="supplier-ledger-summary-value">
+              {formatMoney(summary.current_payable)}
+            </div>
+
+            <div className="supplier-ledger-summary-footer">
+              Outstanding supplier payable
+            </div>
+
           </div>
 
         </div>
       )}
 
       {/* PAYMENT FORM */}
-      <div className="suppliers-card">
 
-        <h2>Record Supplier Payment</h2>
+      <div className="supplier-payment-card">
 
-        <form onSubmit={handleSupplierPayment}>
+        <div className="supplier-ledger-section-header">
 
-          <div className="form-grid">
+          <div className="supplier-ledger-section-heading">
 
-            <div className="form-group">
-              <label>Payment Amount</label>
+            <div className="supplier-ledger-section-icon payment">
+              <ArrowDownLeft size={20} />
+            </div>
+
+            <div>
+              <h2>Record Supplier Payment</h2>
+
+              <p>
+                Record a payment against this supplier's outstanding payable.
+              </p>
+            </div>
+
+          </div>
+
+          {summary && (
+            <div className="supplier-payable-indicator">
+
+              <span>Current Payable</span>
+
+              <strong>
+                {formatMoney(summary.current_payable)}
+              </strong>
+
+            </div>
+          )}
+
+        </div>
+
+        <form
+          onSubmit={handleSupplierPayment}
+          className="supplier-payment-form"
+        >
+
+          <div className="supplier-ledger-form-group">
+
+            <label>
+              Payment Amount
+            </label>
+
+            <div className="supplier-money-input">
+
+              <span>{currency}</span>
 
               <input
                 type="number"
@@ -266,88 +460,147 @@ function SupplierLedger() {
                 onChange={(e) =>
                   setPaymentAmount(e.target.value)
                 }
-                placeholder="Enter payment amount"
+                placeholder="0"
               />
-            </div>
 
-            <div className="form-group">
-              <label>Payment Method</label>
-
-              <select
-                value={paymentMethod}
-                onChange={(e) =>
-                  setPaymentMethod(e.target.value)
-                }
-              >
-                <option value="cash">
-                  Cash
-                </option>
-
-                <option value="bank">
-                  Bank
-                </option>
-
-                <option value="easypaisa">
-                  Easypaisa
-                </option>
-
-                <option value="jazzcash">
-                  JazzCash
-                </option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Description</label>
-
-              <input
-                type="text"
-                value={paymentDescription}
-                onChange={(e) =>
-                  setPaymentDescription(
-                    e.target.value
-                  )
-                }
-                placeholder="Optional description"
-              />
             </div>
 
           </div>
 
-          <div className="form-actions">
+          <div className="supplier-ledger-form-group">
+
+            <label>
+              Payment Method
+            </label>
+
+            <select
+              value={paymentMethod}
+              onChange={(e) =>
+                setPaymentMethod(e.target.value)
+              }
+            >
+              <option value="cash">
+                Cash
+              </option>
+
+              <option value="bank">
+                Bank
+              </option>
+
+              <option value="easypaisa">
+                Easypaisa
+              </option>
+
+              <option value="jazzcash">
+                JazzCash
+              </option>
+            </select>
+
+          </div>
+
+          <div className="supplier-ledger-form-group supplier-description-group">
+
+            <label>
+              Description
+            </label>
+
+            <input
+              type="text"
+              value={paymentDescription}
+              onChange={(e) =>
+                setPaymentDescription(e.target.value)
+              }
+              placeholder="Optional payment description"
+            />
+
+          </div>
+
+          <div className="supplier-payment-action">
 
             <button
               type="submit"
-              className="primary-btn"
+              className="supplier-record-payment-btn"
               disabled={processingPayment}
             >
-              {processingPayment
-                ? "Processing..."
-                : "Record Payment"}
+              {processingPayment ? (
+                <>
+                  <Loader2
+                    size={17}
+                    className="supplier-ledger-spin"
+                  />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={17} />
+                  Record Payment
+                </>
+              )}
             </button>
 
           </div>
 
         </form>
+
       </div>
 
       {/* TRANSACTION HISTORY */}
-      <div className="suppliers-card">
 
-        <h2>Transaction History</h2>
+      <div className="supplier-history-card">
+
+        <div className="supplier-ledger-section-header">
+
+          <div className="supplier-ledger-section-heading">
+
+            <div className="supplier-ledger-section-icon history">
+              <ReceiptText size={20} />
+            </div>
+
+            <div>
+              <h2>Transaction History</h2>
+
+              <p>
+                Complete debit and credit activity for this supplier.
+              </p>
+            </div>
+
+          </div>
+
+          <div className="supplier-transaction-count">
+            {transactions.length}{" "}
+            {transactions.length === 1
+              ? "Transaction"
+              : "Transactions"}
+          </div>
+
+        </div>
 
         {transactions.length === 0 ? (
-          <p>No transactions found.</p>
-        ) : (
-          <div className="table-wrapper">
+          <div className="supplier-empty-history">
 
-            <table>
+            <div className="supplier-empty-history-icon">
+              <ReceiptText size={28} />
+            </div>
+
+            <h3>No Transactions Found</h3>
+
+            <p>
+              There are no transactions recorded for this supplier yet.
+            </p>
+
+          </div>
+        ) : (
+          <div className="supplier-ledger-table-wrapper">
+
+            <table className="supplier-ledger-table">
 
               <thead>
                 <tr>
                   <th>Date</th>
                   <th>Type</th>
-                  <th>Amount</th>
+                  <th className="supplier-th-right">
+                    Amount
+                  </th>
                   <th>Payment Method</th>
                   <th>Purchase Invoice</th>
                   <th>Description</th>
@@ -356,56 +609,118 @@ function SupplierLedger() {
 
               <tbody>
 
-                {transactions.map(
-                  (transaction) => (
+                {transactions.map((transaction) => {
+
+                  const isDebit =
+                    transaction.transaction_type ===
+                    "debit";
+
+                  return (
                     <tr key={transaction.id}>
 
                       <td>
-                        {transaction.created_at
-                          ? new Date(
-                              transaction.created_at
-                            ).toLocaleString()
-                          : "-"}
+
+                        <div className="supplier-ledger-date">
+
+                          <CalendarDays size={14} />
+
+                          <span>
+                            {transaction.created_at
+                              ? new Date(
+                                  transaction.created_at
+                                ).toLocaleString()
+                              : "-"}
+                          </span>
+
+                        </div>
+
                       </td>
 
                       <td>
+
                         <span
                           className={
-                            transaction.transaction_type ===
-                            "debit"
-                              ? "status-danger"
-                              : "status-success"
+                            isDebit
+                              ? "supplier-ledger-type debit"
+                              : "supplier-ledger-type credit"
                           }
                         >
-                          {transaction.transaction_type}
+                          {isDebit ? (
+                            <ArrowUpRight size={14} />
+                          ) : (
+                            <ArrowDownLeft size={14} />
+                          )}
+
+                          {isDebit
+                            ? "Debit"
+                            : "Credit"}
                         </span>
+
+                      </td>
+
+                      <td className="supplier-ledger-amount">
+
+                        <span
+                          className={
+                            isDebit
+                              ? "supplier-amount-debit"
+                              : "supplier-amount-credit"
+                          }
+                        >
+                          {formatMoney(
+                            transaction.amount
+                          )}
+                        </span>
+
                       </td>
 
                       <td>
-                        {currency}{" "}
-                        {Number(
-                          transaction.amount || 0
-                        ).toLocaleString()}
+
+                        {transaction.payment_method ? (
+                          <span
+                            className={`supplier-payment-method ${transaction.payment_method}`}
+                          >
+                            {getPaymentIcon(
+                              transaction.payment_method
+                            )}
+
+                            {formatPaymentMethod(
+                              transaction.payment_method
+                            )}
+                          </span>
+                        ) : (
+                          <span className="supplier-ledger-muted">
+                            —
+                          </span>
+                        )}
+
                       </td>
 
                       <td>
-                        {transaction.payment_method ||
-                          "-"}
+
+                        {transaction.invoice_number ? (
+                          <span className="supplier-invoice">
+                            {transaction.invoice_number}
+                          </span>
+                        ) : (
+                          <span className="supplier-ledger-muted">
+                            —
+                          </span>
+                        )}
+
                       </td>
 
                       <td>
-                        {transaction.invoice_number ||
-                          "-"}
-                      </td>
 
-                      <td>
-                        {transaction.description ||
-                          "-"}
+                        <span className="supplier-ledger-description">
+                          {transaction.description || "—"}
+                        </span>
+
                       </td>
 
                     </tr>
-                  )
-                )}
+                  );
+                })}
 
               </tbody>
 
@@ -421,4 +736,3 @@ function SupplierLedger() {
 }
 
 export default SupplierLedger;
-

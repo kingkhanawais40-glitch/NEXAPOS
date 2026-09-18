@@ -1,8 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
 import { useNotification } from "../context/NotificationContext";
+import {
+  Plus,
+  Search,
+  Truck,
+  UserCheck,
+  Wallet,
+  Pencil,
+  Trash2,
+  BookOpen,
+  X,
+  Phone,
+  MapPin,
+} from "lucide-react";
 
 function Suppliers() {
   const { user } = useAuth();
@@ -20,6 +33,8 @@ function Suppliers() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
+
+  const [search, setSearch] = useState("");
 
   const fetchSuppliers = async () => {
     try {
@@ -172,41 +187,147 @@ function Suppliers() {
     }
   };
 
+  const filteredSuppliers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) {
+      return suppliers;
+    }
+
+    return suppliers.filter((supplier) => {
+      return (
+        supplier.name?.toLowerCase().includes(query) ||
+        supplier.phone?.toLowerCase().includes(query) ||
+        supplier.address?.toLowerCase().includes(query)
+      );
+    });
+  }, [suppliers, search]);
+
+  const totalSuppliers = suppliers.length;
+
+  const suppliersWithPayable = suppliers.filter(
+    (supplier) =>
+      Number(supplier.current_payable || 0) > 0
+  ).length;
+
+  const totalPayable = suppliers.reduce(
+    (sum, supplier) =>
+      sum + Number(supplier.current_payable || 0),
+    0
+  );
+
+  const formatMoney = (amount) => {
+    return `${currency} ${Number(
+      amount || 0
+    ).toLocaleString()}`;
+  };
+
   return (
     <div className="suppliers-page">
 
-      {/* HEADER */}
-      <div className="page-header">
+      {/* PAGE HEADER */}
+      <div className="page-header suppliers-page-header">
         <div>
+          <span className="page-eyebrow">
+            SUPPLIER MANAGEMENT
+          </span>
+
           <h1>Suppliers</h1>
 
           <p>
-            Manage suppliers and their outstanding payables.
+            Manage supplier accounts, contact details and outstanding payables.
           </p>
         </div>
 
         {isAdmin && (
           <button
-            className="primary-btn"
+            className="primary-btn suppliers-add-btn"
             onClick={() => {
               resetForm();
               setShowForm(true);
             }}
           >
-            + Add Supplier
+            <Plus size={18} />
+            Add Supplier
           </button>
         )}
       </div>
 
-      {/* ADD / EDIT SUPPLIER FORM */}
-      {isAdmin && showForm && (
-        <div className="suppliers-card">
+      {/* SUMMARY CARDS */}
+      <div className="suppliers-summary-grid">
 
-          <h2>
-            {editingSupplier
-              ? "Edit Supplier"
-              : "Add Supplier"}
-          </h2>
+        <div className="suppliers-summary-card">
+          <div className="suppliers-summary-icon blue">
+            <Truck size={25} />
+          </div>
+
+          <div>
+            <span>Total Suppliers</span>
+            <strong>{totalSuppliers}</strong>
+            <small>Registered accounts</small>
+          </div>
+        </div>
+
+        <div className="suppliers-summary-card">
+          <div className="suppliers-summary-icon warning">
+            <UserCheck size={25} />
+          </div>
+
+          <div>
+            <span>Suppliers With Payable</span>
+            <strong>{suppliersWithPayable}</strong>
+            <small>Outstanding accounts</small>
+          </div>
+        </div>
+
+        <div className="suppliers-summary-card">
+          <div className="suppliers-summary-icon danger">
+            <Wallet size={25} />
+          </div>
+
+          <div>
+            <span>Total Current Payable</span>
+            <strong>{formatMoney(totalPayable)}</strong>
+            <small>Amount payable</small>
+          </div>
+        </div>
+
+      </div>
+
+      {/* ADD / EDIT FORM */}
+      {isAdmin && showForm && (
+        <div className="suppliers-form-card">
+
+          <div className="suppliers-form-header">
+            <div>
+              <span className="page-eyebrow">
+                {editingSupplier
+                  ? "UPDATE ACCOUNT"
+                  : "NEW ACCOUNT"}
+              </span>
+
+              <h2>
+                {editingSupplier
+                  ? "Edit Supplier"
+                  : "Add Supplier"}
+              </h2>
+
+              <p>
+                {editingSupplier
+                  ? "Update supplier account information."
+                  : "Create a new supplier account."}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="suppliers-close-btn"
+              onClick={resetForm}
+              aria-label="Close"
+            >
+              <X size={19} />
+            </button>
+          </div>
 
           <form
             onSubmit={
@@ -253,7 +374,7 @@ function Suppliers() {
                   onChange={(e) =>
                     setAddress(e.target.value)
                   }
-                  placeholder="Enter address"
+                  placeholder="Enter supplier address"
                 />
               </div>
 
@@ -273,7 +394,7 @@ function Suppliers() {
 
             </div>
 
-            <div className="form-actions">
+            <div className="form-actions suppliers-form-actions">
 
               <button
                 type="submit"
@@ -299,22 +420,110 @@ function Suppliers() {
       )}
 
       {/* SUPPLIER LIST */}
-      <div className="suppliers-card">
+      <div className="suppliers-card suppliers-list-card">
 
-        <h2>Supplier List</h2>
+        <div className="suppliers-list-header">
+          <div>
+            <h2>Supplier Directory</h2>
+
+            <p>
+              {filteredSuppliers.length} supplier
+              {filteredSuppliers.length !== 1 ? "s" : ""} displayed
+            </p>
+          </div>
+        </div>
+
+        {/* SEARCH */}
+        <div className="suppliers-toolbar">
+
+          <div className="suppliers-search">
+            <Search size={18} />
+
+            <input
+              type="text"
+              value={search}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
+              placeholder="Search by name, phone or address..."
+            />
+
+            {search && (
+              <button
+                type="button"
+                className="suppliers-search-clear"
+                onClick={() => setSearch("")}
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+
+        </div>
 
         {loading ? (
-          <p>Loading suppliers...</p>
-        ) : suppliers.length === 0 ? (
-          <p>No suppliers found.</p>
-        ) : (
-          <div className="table-wrapper">
+          <div className="suppliers-state">
 
-            <table>
+            <div className="suppliers-state-icon">
+              <Truck size={25} />
+            </div>
+
+            <h3>Loading suppliers...</h3>
+
+            <p>
+              Please wait while supplier data is loaded.
+            </p>
+
+          </div>
+        ) : suppliers.length === 0 ? (
+          <div className="suppliers-state">
+
+            <div className="suppliers-state-icon">
+              <Truck size={25} />
+            </div>
+
+            <h3>No suppliers found</h3>
+
+            <p>
+              Add your first supplier to start managing supplier accounts.
+            </p>
+
+            {isAdmin && (
+              <button
+                className="primary-btn"
+                onClick={() => {
+                  resetForm();
+                  setShowForm(true);
+                }}
+              >
+                <Plus size={17} />
+                Add Supplier
+              </button>
+            )}
+
+          </div>
+        ) : filteredSuppliers.length === 0 ? (
+          <div className="suppliers-state">
+
+            <div className="suppliers-state-icon">
+              <Search size={25} />
+            </div>
+
+            <h3>No matching suppliers</h3>
+
+            <p>
+              Try a different name, phone number or address.
+            </p>
+
+          </div>
+        ) : (
+          <div className="table-wrapper suppliers-table-wrapper">
+
+            <table className="suppliers-table">
 
               <thead>
                 <tr>
-                  <th>Name</th>
+                  <th>Supplier</th>
                   <th>Phone</th>
                   <th>Address</th>
                   <th>Opening Balance</th>
@@ -328,76 +537,138 @@ function Suppliers() {
 
               <tbody>
 
-                {suppliers.map((supplier) => (
-                  <tr key={supplier.id}>
+                {filteredSuppliers.map((supplier) => {
 
-                    <td>
-                      {supplier.name}
-                    </td>
+                  const currentPayable = Number(
+                    supplier.current_payable || 0
+                  );
 
-                    <td>
-                      {supplier.phone || "-"}
-                    </td>
+                  return (
+                    <tr key={supplier.id}>
 
-                    <td>
-                      {supplier.address || "-"}
-                    </td>
-
-                    <td>
-                      {currency}{" "}
-                      {Number(
-                        supplier.opening_balance || 0
-                      ).toLocaleString()}
-                    </td>
-
-                    <td>
-                      {currency}{" "}
-                      {Number(
-                        supplier.current_payable || 0
-                      ).toLocaleString()}
-                    </td>
-
-                    {isAdmin && (
                       <td>
+                        <div className="supplier-name-cell">
 
-                        {/* EDIT */}
-                        <button
-                          className="secondary-btn"
-                          onClick={() =>
-                            handleEditClick(supplier)
-                          }
-                        >
-                          Edit
-                        </button>
+                          <div className="supplier-avatar">
+                            {supplier.name
+                              ?.charAt(0)
+                              ?.toUpperCase() || "S"}
+                          </div>
 
-                        {/* LEDGER */}
-                        <button
-                          className="secondary-btn"
-                          onClick={() =>
-                            (window.location.href =
-                              `/suppliers/${supplier.id}/ledger`)
-                          }
-                        >
-                          Ledger
-                        </button>
+                          <div>
+                            <strong>
+                              {supplier.name}
+                            </strong>
 
-                        {/* DELETE */}
-                        <button
-                          className="danger-btn"
-                          onClick={() =>
-                            handleDeleteSupplier(
-                              supplier
-                            )
-                          }
-                        >
-                          Delete
-                        </button>
+                            <span>
+                              Supplier #{supplier.id}
+                            </span>
+                          </div>
 
+                        </div>
                       </td>
-                    )}
 
-                  </tr>
-                ))}
+                      <td>
+                        <div className="supplier-contact">
+
+                          <Phone size={14} />
+
+                          <span>
+                            {supplier.phone || "-"}
+                          </span>
+
+                        </div>
+                      </td>
+
+                      <td>
+                        <div className="supplier-contact">
+
+                          {supplier.address ? (
+                            <>
+                              <MapPin size={14} />
+
+                              <span>
+                                {supplier.address}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="muted-cell">
+                              -
+                            </span>
+                          )}
+
+                        </div>
+                      </td>
+
+                      <td>
+                        <span className="supplier-money">
+                          {formatMoney(
+                            supplier.opening_balance || 0
+                          )}
+                        </span>
+                      </td>
+
+                      <td>
+                        <span
+                          className={
+                            currentPayable > 0
+                              ? "supplier-payable payable-active"
+                              : "supplier-payable payable-clear"
+                          }
+                        >
+                          {formatMoney(currentPayable)}
+                        </span>
+                      </td>
+
+                      {isAdmin && (
+                        <td>
+
+                          <div className="supplier-actions">
+
+                            <button
+                              type="button"
+                              className="table-action-btn edit-btn"
+                              onClick={() =>
+                                handleEditClick(supplier)
+                              }
+                            >
+                              <Pencil size={14} />
+                              Edit
+                            </button>
+
+                            <button
+                              type="button"
+                              className="table-action-btn ledger-btn"
+                              onClick={() =>
+                                (window.location.href =
+                                  `/suppliers/${supplier.id}/ledger`)
+                              }
+                            >
+                              <BookOpen size={14} />
+                              Ledger
+                            </button>
+
+                            <button
+                              type="button"
+                              className="table-action-btn delete-btn"
+                              onClick={() =>
+                                handleDeleteSupplier(
+                                  supplier
+                                )
+                              }
+                            >
+                              <Trash2 size={14} />
+                              Delete
+                            </button>
+
+                          </div>
+
+                        </td>
+                      )}
+
+                    </tr>
+                  );
+                })}
 
               </tbody>
 
@@ -413,4 +684,3 @@ function Suppliers() {
 }
 
 export default Suppliers;
-

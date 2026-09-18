@@ -1,6 +1,8 @@
 require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 
 const db = require("./database/db");
 const productRoutes = require("./routes/productRoutes");
@@ -23,13 +25,17 @@ const settingsRoutes = require("./routes/settingsRoutes");
 const dailyClosingRoutes = require("./routes/dailyClosingRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 
-
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded files
+app.use(
+    "/uploads",
+    express.static(path.join(__dirname, "uploads"))
+);
 
 app.use("/api/products", productRoutes);
 app.use("/api/customers", customerRoutes);
@@ -76,9 +82,11 @@ app.get("/", (req, res) => {
         message: "General Store POS API is running!"
     });
 });
+
 module.exports = app;
+
 app.listen(PORT, () => {
     console.log(`
-NexaPOS server running on port $ { PORT }
+NexaPOS server running on port ${PORT}
 `);
 });

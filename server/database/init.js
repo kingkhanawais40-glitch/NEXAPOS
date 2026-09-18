@@ -43,6 +43,32 @@ async function initializeDatabase() {
             )
         `);
 
+        // =================================================
+        // PRODUCT BATCHES TABLE
+        // =================================================
+
+        await db.execute(`
+    CREATE TABLE IF NOT EXISTS product_batches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        product_id INTEGER NOT NULL,
+
+        batch_number TEXT NOT NULL,
+
+        expiry_date TEXT,
+
+        quantity REAL NOT NULL DEFAULT 0,
+
+        purchase_price REAL NOT NULL DEFAULT 0,
+
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+        FOREIGN KEY (product_id)
+        REFERENCES products(id)
+        ON DELETE CASCADE
+    )
+`);
+
 
         // =================================================
         // CUSTOMERS TABLE

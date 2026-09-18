@@ -1,38 +1,43 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Barcode,
+  Banknote,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  CreditCard,
+  Layers3,
+  Minus,
+  Package,
+  Plus,
+  Printer,
+  Percent,
+  Receipt,
+  RefreshCw,
+  Search,
+  ShoppingCart,
+  Tag,
+  Trash2,
+  UserPlus,
+  UserRound,
+  WalletCards,
+  X,
+} from "lucide-react";
+
 import api from "../services/api";
 import { useNotification } from "../context/NotificationContext";
-
-/*
-  FORMAT INVOICE DATE/TIME
-
-  Backend already sends Pakistan time:
-  YYYY-MM-DD HH:mm:ss
-
-  Example:
-  2026-09-16 18:27:43
-
-  We display it directly without
-  applying another timezone conversion.
-*/
 
 const formatInvoiceDate = (value) => {
   if (!value) return "-";
 
   const raw = String(value).trim();
 
-  if (
-    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(
-      raw
-    )
-  ) {
-    const [datePart, timePart] =
-      raw.split(" ");
-
-    const [year, month, day] =
-      datePart.split("-");
-
-    const [hour, minute, second] =
-      timePart.split(":");
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
+    const [datePart, timePart] = raw.split(" ");
+    const [year, month, day] = datePart.split("-");
+    const [hour, minute, second] = timePart.split(":");
 
     const date = new Date(
       Number(year),
@@ -62,82 +67,218 @@ const formatInvoiceDate = (value) => {
 };
 
 function POS() {
-  const { showSuccess, showError } =
-    useNotification();
+  const { showSuccess, showError } = useNotification();
+
+  const barcodeInputRef = useRef(null);
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const [cart, setCart] = useState([]);
 
   const [customers, setCustomers] = useState([]);
-  const [selectedCustomer, setSelectedCustomer] =
-    useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState("");
 
-  const [showCustomerForm, setShowCustomerForm] =
-    useState(false);
-  const [customerName, setCustomerName] =
-    useState("");
-  const [customerPhone, setCustomerPhone] =
-    useState("");
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [savingCustomer, setSavingCustomer] = useState(false);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeError, setBarcodeError] = useState("");
+
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [selectedProductForBatch, setSelectedProductForBatch] =
+    useState(null);
+  const [productBatches, setProductBatches] = useState([]);
+  const [loadingBatches, setLoadingBatches] = useState(false);
+
+  const [showNewProductForm, setShowNewProductForm] = useState(false);
+  const [newProductBarcode, setNewProductBarcode] = useState("");
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductPurchasePrice, setNewProductPurchasePrice] = useState("");
+  const [newProductSalePrice, setNewProductSalePrice] = useState("");
+  const [newProductStock, setNewProductStock] = useState("");
+  const [newProductUnit, setNewProductUnit] = useState("piece");
+  const [savingNewProduct, setSavingNewProduct] = useState(false);
 
   const [discount, setDiscount] = useState(0);
   const [paidAmount, setPaidAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] =
-    useState("cash");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [processingSale, setProcessingSale] = useState(false);
 
-  const [invoiceId, setInvoiceId] =
-    useState(null);
+  const [settings, setSettings] = useState(null);
+
+  const [invoiceId, setInvoiceId] = useState(null);
   const [invoice, setInvoice] = useState(null);
-  const [printMode, setPrintMode] =
-    useState("a4");
+  const [showInvoice, setShowInvoice] = useState(false);
 
-  const [searchTerm, setSearchTerm] =
-    useState("");
-  const [barcodeInput, setBarcodeInput] =
-    useState("");
-  const [barcodeError, setBarcodeError] =
-    useState("");
+  const currency = settings?.currency || "PKR";
+  const taxRate = Number(settings?.default_tax || 0);
 
-  const [processingSale, setProcessingSale] =
-    useState(false);
+  const filteredProducts = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
 
-  const [settings, setSettings] =
-    useState(null);
+    if (!query) return products;
+
+    return products.filter((product) => {
+      const name = String(product.name || "").toLowerCase();
+      const barcode = String(product.barcode || "").toLowerCase();
+
+      return name.includes(query) || barcode.includes(query);
+    });
+  }, [products, searchTerm]);
+
+  const subtotal = useMemo(() => {
+    return cart.reduce(
+      (total, item) =>
+        total +
+        Number(item.sale_price || 0) * Number(item.quantity || 0),
+      0
+    );
+  }, [cart]);
+
+  const finalDiscount = Math.max(Number(discount) || 0, 0);
+
+  const taxableAmount = Math.max(subtotal - finalDiscount, 0);
+
+  const taxAmount = (taxableAmount * taxRate) / 100;
+
+  const grandTotal = taxableAmount + taxAmount;
+
+  const paid = Math.max(Number(paidAmount) || 0, 0);
+
+  const paymentDifference = Math.abs(paid - grandTotal);
+
+  const cartItemCount = cart.reduce(
+    (total, item) => total + Number(item.quantity || 0),
+    0
+  );
+
+  const dueAmount = Math.max(grandTotal - paid, 0);
+
+  const changeAmount = Math.max(paid - grandTotal, 0);
+
+  const selectedCustomerData = customers.find(
+    (customer) => String(customer.id) === String(selectedCustomer)
+  );
+
+  const formatMoney = (value) =>
+    Number(value || 0).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+  // ==========================================
+  // LOAD DATA
+  // ==========================================
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+
+      const response = await api.get("/products");
+
+      setProducts(response.data?.data || []);
+    } catch (error) {
+      console.error("GET PRODUCTS ERROR:", error);
+
+      showError(
+        error.response?.data?.message || "Failed to load products"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const response = await api.get("/customers");
+
+      setCustomers(response.data?.data || []);
+    } catch (error) {
+      console.error("GET CUSTOMERS ERROR:", error);
+    }
+  };
+
+  const loadSettings = async () => {
+    try {
+      const response = await api.get("/settings");
+
+      setSettings(response.data?.data || null);
+    } catch (error) {
+      console.error("GET SETTINGS ERROR:", error);
+    }
+  };
+
+  useEffect(() => {
+    loadProducts();
+    loadCustomers();
+    loadSettings();
+
+    setTimeout(() => {
+      barcodeInputRef.current?.focus();
+    }, 300);
+  }, []);
 
   // ==========================================
   // ADD PRODUCT TO CART
   // ==========================================
 
   const addProductToCart = (product) => {
-    if (product.stock <= 0) {
-      showError("Product is out of stock");
+    const availableStock = Number(
+      product.batch_stock ?? product.stock ?? 0
+    );
+
+    if (availableStock <= 0) {
+      showError(
+        product.batch_id
+          ? "This batch is out of stock"
+          : "Product is out of stock"
+      );
+
       return false;
+    }
+
+    if (product.expiry_date) {
+      const today = new Date().toISOString().split("T")[0];
+
+      if (product.expiry_date < today) {
+        showError(`Batch ${product.batch_number || ""} has expired`);
+
+        return false;
+      }
     }
 
     let added = true;
 
     setCart((currentCart) => {
-      const existingProduct =
-        currentCart.find(
-          (item) => item.id === product.id
-        );
+      const existingProduct = currentCart.find(
+        (item) =>
+          item.id === product.id &&
+          (item.batch_id ?? null) === (product.batch_id ?? null)
+      );
 
       if (existingProduct) {
-        if (
-          existingProduct.quantity >=
-          product.stock
-        ) {
-          showError("Insufficient stock");
+        if (Number(existingProduct.quantity) >= availableStock) {
+          showError(
+            product.batch_id
+              ? "Insufficient batch stock"
+              : "Insufficient stock"
+          );
+
           added = false;
+
           return currentCart;
         }
 
         return currentCart.map((item) =>
-          item.id === product.id
+          item.id === product.id &&
+          (item.batch_id ?? null) === (product.batch_id ?? null)
             ? {
                 ...item,
-                quantity:
-                  item.quantity + 1,
+                quantity: Number(item.quantity) + 1,
               }
             : item
         );
@@ -156,117 +297,448 @@ function POS() {
   };
 
   // ==========================================
+  // BATCH SELECTOR
+  // ==========================================
+
+  const openBatchSelector = async (product) => {
+    try {
+      setSelectedProductForBatch(product);
+      setLoadingBatches(true);
+      setBatchModalOpen(true);
+      setProductBatches([]);
+
+      const response = await api.get(`/products/${product.id}/batches`);
+
+      setProductBatches(response.data?.data || []);
+    } catch (error) {
+      console.error("GET PRODUCT BATCHES ERROR:", error);
+
+      setBatchModalOpen(false);
+
+      showError(
+        error.response?.data?.message || "Failed to load product batches"
+      );
+    } finally {
+      setLoadingBatches(false);
+    }
+  };
+
+  const closeBatchSelector = () => {
+    setBatchModalOpen(false);
+    setSelectedProductForBatch(null);
+    setProductBatches([]);
+  };
+
+  const handleBatchSelect = (batch) => {
+    if (!selectedProductForBatch) return;
+
+    const batchStock = Number(batch.quantity || 0);
+
+    if (batchStock <= 0) {
+      showError("This batch is out of stock");
+      return;
+    }
+
+    if (batch.expiry_date) {
+      const today = new Date().toISOString().split("T")[0];
+
+      if (batch.expiry_date < today) {
+        showError(`Batch ${batch.batch_number || ""} has expired`);
+
+        return;
+      }
+    }
+
+    const productWithBatch = {
+      ...selectedProductForBatch,
+      batch_id: Number(batch.id),
+      batch_number: batch.batch_number || null,
+      expiry_date: batch.expiry_date || null,
+      batch_stock: batchStock,
+    };
+
+    const added = addProductToCart(productWithBatch);
+
+    if (added) {
+      showSuccess(`${selectedProductForBatch.name} added to cart`);
+
+      closeBatchSelector();
+    }
+  };
+
+  // ==========================================
+  // NEW PRODUCT
+  // ==========================================
+
+  const closeNewProductForm = () => {
+    setShowNewProductForm(false);
+    setNewProductBarcode("");
+    setNewProductName("");
+    setNewProductPurchasePrice("");
+    setNewProductSalePrice("");
+    setNewProductStock("");
+    setNewProductUnit("piece");
+  };
+
+  const handleSaveNewProduct = async () => {
+    if (!newProductName.trim()) {
+      showError("Product name is required");
+      return;
+    }
+
+    if (
+      newProductSalePrice === "" ||
+      Number(newProductSalePrice) < 0
+    ) {
+      showError("Valid sale price is required");
+      return;
+    }
+
+    if (
+      newProductStock === "" ||
+      Number(newProductStock) < 0
+    ) {
+      showError("Valid stock is required");
+      return;
+    }
+
+    setSavingNewProduct(true);
+
+    try {
+      const response = await api.post("/products", {
+        name: newProductName.trim(),
+        barcode: newProductBarcode.trim() || null,
+        purchase_price: Number(newProductPurchasePrice || 0),
+        sale_price: Number(newProductSalePrice),
+        stock: Number(newProductStock),
+        unit: newProductUnit.trim() || "piece",
+      });
+
+      const productId =
+        response.data?.id || response.data?.data?.id;
+
+      if (!productId) {
+        throw new Error("Product ID was not returned by the server");
+      }
+
+      const createdProduct =
+        response.data?.data || response.data || {};
+
+      addProductToCart({
+        ...createdProduct,
+        id: Number(productId),
+        name: newProductName.trim(),
+        barcode: newProductBarcode.trim() || null,
+        sale_price: Number(newProductSalePrice),
+        stock: Number(newProductStock),
+        batch_stock: Number(newProductStock),
+        batch_id: null,
+        batch_number: null,
+        expiry_date: null,
+      });
+
+      setProducts((currentProducts) => [
+        {
+          ...createdProduct,
+          id: Number(productId),
+          name: newProductName.trim(),
+          barcode: newProductBarcode.trim() || null,
+          sale_price: Number(newProductSalePrice),
+          stock: Number(newProductStock),
+        },
+        ...currentProducts,
+      ]);
+
+      closeNewProductForm();
+      setBarcodeInput("");
+
+      showSuccess("Product created and added to cart");
+
+      barcodeInputRef.current?.focus();
+    } catch (error) {
+      console.error("SAVE NEW PRODUCT ERROR:", error);
+
+      showError(
+        error.response?.data?.message || "Failed to create product"
+      );
+    } finally {
+      setSavingNewProduct(false);
+    }
+  };
+
+  // ==========================================
   // BARCODE SCAN
   // ==========================================
 
-  const handleBarcodeScan = (e) => {
-    if (e.key !== "Enter") return;
+  const handleBarcodeScan = async (event) => {
+    if (event.key !== "Enter") return;
 
-    e.preventDefault();
+    event.preventDefault();
 
     const code = barcodeInput.trim();
 
     if (!code) return;
 
-    const product = products.find(
-      (p) =>
-        p.barcode &&
-        p.barcode === code
-    );
+    setBarcodeError("");
 
-    if (!product) {
-      setBarcodeError(
-        `No product found with barcode "${code}"`
+    try {
+      const response = await api.get(
+        `/products/barcode/${encodeURIComponent(code)}`
       );
 
+      const product = response.data?.data;
+
+      if (!product) {
+        throw new Error("Product not found");
+      }
+
+      const added = addProductToCart(product);
+
+      if (added) {
+        showSuccess(`${product.name} added to cart`);
+      }
+
       setBarcodeInput("");
+
+      setTimeout(() => {
+        barcodeInputRef.current?.focus();
+      }, 50);
+    } catch (error) {
+      const status = error.response?.status;
+
+      if (status === 404) {
+        setNewProductBarcode(code);
+        setNewProductName("");
+        setNewProductPurchasePrice("");
+        setNewProductSalePrice("");
+        setNewProductStock("");
+        setNewProductUnit("piece");
+
+        setShowNewProductForm(true);
+        setBarcodeInput("");
+
+        return;
+      }
+
+      console.error("BARCODE SCAN ERROR:", error);
+
+      const message =
+        error.response?.data?.message || "Barcode lookup failed";
+
+      setBarcodeError(message);
+      setBarcodeInput("");
+    }
+  };
+
+  // ==========================================
+  // CART ACTIONS
+  // ==========================================
+
+  const removeFromCart = (item) => {
+    setCart((currentCart) =>
+      currentCart.filter(
+        (cartItem) =>
+          !(
+            cartItem.id === item.id &&
+            (cartItem.batch_id ?? null) === (item.batch_id ?? null)
+          )
+      )
+    );
+  };
+
+  const updateCartQuantity = (item, newQuantity) => {
+    const quantity = Number(newQuantity);
+
+    if (quantity <= 0) {
+      removeFromCart(item);
+      return;
+    }
+
+    const availableStock = Number(
+      item.batch_stock ?? item.stock ?? 0
+    );
+
+    if (quantity > availableStock) {
+      showError(
+        item.batch_id
+          ? "Insufficient batch stock"
+          : "Insufficient stock"
+      );
 
       return;
     }
 
-    setBarcodeError("");
+    setCart((currentCart) =>
+      currentCart.map((cartItem) =>
+        cartItem.id === item.id &&
+        (cartItem.batch_id ?? null) === (item.batch_id ?? null)
+          ? {
+              ...cartItem,
+              quantity,
+            }
+          : cartItem
+      )
+    );
+  };
 
-    addProductToCart(product);
+  const increaseQuantity = (item) => {
+    updateCartQuantity(item, Number(item.quantity) + 1);
+  };
 
-    setBarcodeInput("");
+  const decreaseQuantity = (item) => {
+    updateCartQuantity(item, Number(item.quantity) - 1);
+  };
+
+  const clearCart = () => {
+    if (cart.length === 0) return;
+
+    const confirmed = window.confirm(
+      "Clear all products from the cart?"
+    );
+
+    if (!confirmed) return;
+
+    setCart([]);
+    setDiscount(0);
+    setPaidAmount(0);
+    setSelectedCustomer("");
   };
 
   // ==========================================
-  // FETCH PRODUCTS
+  // CUSTOMER
   // ==========================================
 
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const response =
-          await api.get("/products");
+  const handleSaveCustomer = async () => {
+    if (!customerName.trim()) {
+      showError("Customer name is required");
+      return;
+    }
 
-        setProducts(
-          response.data.data
-        );
-      } catch (error) {
-        console.error(
-          error.response?.data?.message ||
-            "Failed to load products"
-        );
-      } finally {
-        setLoading(false);
+    setSavingCustomer(true);
+
+    try {
+      const response = await api.post("/customers", {
+        name: customerName.trim(),
+        phone: customerPhone.trim(),
+      });
+
+      const newCustomer = {
+        id: response.data?.data?.id || response.data?.id,
+        name: customerName.trim(),
+        phone: customerPhone.trim(),
+      };
+
+      if (!newCustomer.id) {
+        throw new Error("Customer ID was not returned");
       }
-    };
 
-    fetchProducts();
-  }, []);
+      setCustomers((current) => [...current, newCustomer]);
+
+      setSelectedCustomer(String(newCustomer.id));
+
+      setCustomerName("");
+      setCustomerPhone("");
+      setShowCustomerForm(false);
+
+      showSuccess("Customer added successfully");
+    } catch (error) {
+      console.error("CUSTOMER ERROR:", error);
+
+      showError(
+        error.response?.data?.message || "Failed to add customer"
+      );
+    } finally {
+      setSavingCustomer(false);
+    }
+  };
 
   // ==========================================
-  // FETCH SETTINGS
+  // CHECKOUT
   // ==========================================
 
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response =
-          await api.get("/settings");
+  const handleCheckout = async () => {
+    if (cart.length === 0) {
+      showError("Cart is empty");
+      return;
+    }
 
-        setSettings(
-          response.data.data
-        );
-      } catch (error) {
-        console.error(
-          error.response?.data?.message ||
-            "Failed to load settings"
-        );
+    if (finalDiscount > subtotal) {
+      showError("Discount cannot be greater than subtotal");
+      return;
+    }
+
+    if (paid > grandTotal) {
+      showError("Paid amount cannot be greater than grand total");
+      return;
+    }
+
+    if (grandTotal - paid > 0 && !selectedCustomer) {
+      showError("Customer is required for a credit sale");
+      return;
+    }
+
+    setProcessingSale(true);
+
+    try {
+      const response = await api.post("/invoices", {
+        customer_id: selectedCustomer
+          ? Number(selectedCustomer)
+          : null,
+
+        discount: finalDiscount,
+
+        tax: taxAmount,
+
+        paid_amount: paid,
+
+        payment_method: paymentMethod,
+
+        items: cart.map((item) => ({
+          product_id: item.id,
+          quantity: Number(item.quantity),
+          batch_id: item.batch_id ?? null,
+        })),
+      });
+
+      const createdInvoiceId =
+        response.data?.data?.invoice_id ||
+        response.data?.invoice_id;
+
+      if (!createdInvoiceId) {
+        throw new Error("Invoice ID was not returned");
       }
-    };
 
-    fetchSettings();
-  }, []);
+      setInvoiceId(Number(createdInvoiceId));
+
+      setCart([]);
+      setSelectedCustomer("");
+      setDiscount(0);
+      setPaidAmount(0);
+      setPaymentMethod("cash");
+      setSearchTerm("");
+
+      await loadProducts();
+      await loadCustomers();
+
+      showSuccess(
+        `Sale completed successfully! Invoice: ${
+          response.data?.data?.invoice_number ||
+          createdInvoiceId
+        }`
+      );
+    } catch (error) {
+      console.error("CHECKOUT ERROR:", error);
+
+      showError(
+        error.response?.data?.message || "Failed to create sale"
+      );
+    } finally {
+      setProcessingSale(false);
+    }
+  };
 
   // ==========================================
-  // FETCH CUSTOMERS
-  // ==========================================
-
-  useEffect(() => {
-    const fetchCustomers = async () => {
-      try {
-        const response =
-          await api.get("/customers");
-
-        setCustomers(
-          response.data.data
-        );
-      } catch (error) {
-        console.error(
-          error.response?.data?.message ||
-            "Failed to load customers"
-        );
-      }
-    };
-
-    fetchCustomers();
-  }, []);
-
-  // ==========================================
-  // FETCH CREATED INVOICE
+  // LOAD CREATED INVOICE
   // ==========================================
 
   useEffect(() => {
@@ -274,37 +746,16 @@ function POS() {
 
     const fetchInvoice = async () => {
       try {
-        const response =
-          await api.get(
-            `/invoices/${invoiceId}`
-          );
+        const response = await api.get(`/invoices/${invoiceId}`);
 
-        console.log(
-          "INVOICE RESPONSE:",
-          response.data
-        );
+        setInvoice(response.data?.data || null);
 
-        console.log(
-          "RAW CREATED AT:",
-          response.data.data?.invoice
-            ?.created_at
-        );
-
-        console.log(
-          "FORMATTED CREATED AT:",
-          formatInvoiceDate(
-            response.data.data?.invoice
-              ?.created_at
-          )
-        );
-
-        setInvoice(
-          response.data.data
-        );
+        setShowInvoice(true);
       } catch (error) {
-        console.error(
-          error.response?.data?.message ||
-            "Failed to load invoice"
+        console.error("GET INVOICE ERROR:", error);
+
+        showError(
+          error.response?.data?.message || "Failed to load invoice"
         );
       }
     };
@@ -313,244 +764,171 @@ function POS() {
   }, [invoiceId]);
 
   // ==========================================
-  // CART CALCULATIONS
+  // PRINT INVOICE
   // ==========================================
 
-  const subtotal = cart.reduce(
-    (total, item) =>
-      total +
-      Number(item.sale_price) *
-        Number(item.quantity),
-    0
-  );
+  const printInvoice = () => {
+    const printArea = document.querySelector(".invoice-print-area");
 
-  const finalDiscount = Math.max(
-    Number(discount) || 0,
-    0
-  );
-
-  const taxableAmount = Math.max(
-    subtotal - finalDiscount,
-    0
-  );
-
-  const taxRate = Number(
-    settings?.default_tax || 0
-  );
-
-  const currency =
-    settings?.currency || "PKR";
-
-  const taxAmount =
-    (taxableAmount * taxRate) / 100;
-
-  const grandTotal =
-    taxableAmount + taxAmount;
-
-  const paymentDifference = Math.abs(
-    Number(paidAmount) -
-      grandTotal
-  );
-
-  // ==========================================
-  // ADD CUSTOMER
-  // ==========================================
-
-  const handleSaveCustomer = async () => {
-    if (!customerName.trim()) {
-      showError(
-        "Customer name is required"
-      );
-
+    if (!printArea) {
+      showError("Invoice preview not found");
       return;
     }
 
-    try {
-      const response =
-        await api.post(
-          "/customers",
-          {
-            name: customerName,
-            phone: customerPhone,
-          }
-        );
+    const printWindow = window.open(
+      "",
+      "_blank",
+      "width=900,height=900"
+    );
 
-      const newCustomer = {
-        id:
-          response.data.data?.id ||
-          response.data.id,
-
-        name: customerName,
-
-        phone: customerPhone,
-      };
-
-      setCustomers(
-        (currentCustomers) => [
-          ...currentCustomers,
-          newCustomer,
-        ]
-      );
-
-      setSelectedCustomer(
-        String(newCustomer.id)
-      );
-
-      setCustomerName("");
-      setCustomerPhone("");
-
-      setShowCustomerForm(false);
-
-      showSuccess(
-        "Customer added successfully"
-      );
-    } catch (error) {
-      console.error(
-        "Customer error:",
-        error
-      );
-
+    if (!printWindow) {
       showError(
-        error.response?.data?.message ||
-          "Failed to add customer"
+        "Please allow popups to print the invoice"
       );
+      return;
     }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice ${
+            invoice?.invoice?.invoice_number || ""
+          }</title>
+
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              margin: 0;
+              padding: 24px;
+              background: #ffffff;
+              color: #111827;
+              font-family: Arial, Helvetica, sans-serif;
+            }
+
+            .print-invoice {
+              width: 100%;
+              max-width: 850px;
+              margin: 0 auto;
+            }
+
+            h1,
+            h2,
+            h3,
+            p {
+              margin-top: 0;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 20px;
+            }
+
+            th,
+            td {
+              padding: 10px;
+              border-bottom: 1px solid #e5e7eb;
+              text-align: left;
+              font-size: 13px;
+            }
+
+            th {
+              background: #f3f4f6;
+              font-weight: 700;
+            }
+
+            .invoice-head {
+              display: flex;
+              justify-content: space-between;
+              gap: 20px;
+              padding-bottom: 18px;
+              border-bottom: 2px solid #111827;
+            }
+
+            .invoice-meta {
+              text-align: right;
+            }
+
+            .invoice-customer {
+              margin-top: 18px;
+              padding: 12px 14px;
+              background: #f8fafc;
+              border: 1px solid #e5e7eb;
+            }
+
+            .invoice-summary {
+              width: 320px;
+              margin: 22px 0 0 auto;
+            }
+
+            .summary-row {
+              display: flex;
+              justify-content: space-between;
+              padding: 6px 0;
+            }
+
+            .grand-total {
+              margin-top: 8px;
+              padding-top: 10px;
+              border-top: 2px solid #111827;
+              font-size: 17px;
+              font-weight: 800;
+            }
+
+            .invoice-footer {
+              margin-top: 30px;
+              padding-top: 15px;
+              border-top: 1px solid #e5e7eb;
+              text-align: center;
+              font-size: 12px;
+              color: #6b7280;
+            }
+
+            @media print {
+              body {
+                padding: 0;
+              }
+
+              .print-invoice {
+                max-width: none;
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="print-invoice">
+            ${printArea.innerHTML}
+          </div>
+
+          <script>
+            window.onload = function () {
+              window.print();
+
+              setTimeout(function () {
+                window.close();
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
   };
 
-  // ==========================================
-  // COMPLETE SALE
-  // ==========================================
+  const closeInvoice = () => {
+    setShowInvoice(false);
+    setInvoice(null);
+    setInvoiceId(null);
 
-  const handleCompleteSale = async () => {
-    if (cart.length === 0) {
-      showError("Cart is empty");
-      return;
-    }
-
-    if (finalDiscount > subtotal) {
-      showError(
-        "Discount cannot be greater than subtotal"
-      );
-
-      return;
-    }
-
-    if (
-      Number(paidAmount) >
-      grandTotal
-    ) {
-      showError(
-        "Paid amount cannot be greater than grand total"
-      );
-
-      return;
-    }
-
-    setProcessingSale(true);
-
-    try {
-      const response =
-        await api.post(
-          "/invoices",
-          {
-            customer_id:
-              selectedCustomer
-                ? Number(
-                    selectedCustomer
-                  )
-                : null,
-
-            discount:
-              finalDiscount,
-
-            paid_amount:
-              Number(paidAmount),
-
-            payment_method:
-              paymentMethod,
-
-            items: cart.map(
-              (item) => ({
-                product_id:
-                  item.id,
-
-                quantity:
-                  item.quantity,
-              })
-            ),
-          }
-        );
-
-      const createdInvoiceId =
-        response.data.data.invoiceId;
-
-      console.log(
-        "CREATED INVOICE ID:",
-        createdInvoiceId
-      );
-
-      setInvoiceId(
-        createdInvoiceId
-      );
-
-      // ========================================
-      // RESET POS
-      // ========================================
-
-      setCart([]);
-
-      setSelectedCustomer("");
-
-      setDiscount(0);
-
-      setPaidAmount(0);
-
-      setPaymentMethod("cash");
-
-      setSearchTerm("");
-
-      // ========================================
-      // REFRESH PRODUCTS
-      // ========================================
-
-      const productsResponse =
-        await api.get(
-          "/products"
-        );
-
-      setProducts(
-        productsResponse.data.data
-      );
-
-      // ========================================
-      // REFRESH CUSTOMERS
-      // ========================================
-
-      const customersResponse =
-        await api.get(
-          "/customers"
-        );
-
-      setCustomers(
-        customersResponse.data.data
-      );
-
-      showSuccess(
-        `Sale completed successfully! Invoice: ${response.data.data.invoiceNumber}`
-      );
-    } catch (error) {
-      console.error(
-        "Sale error:",
-        error
-      );
-
-      showError(
-        error.response?.data?.message ||
-          "Failed to create sale"
-      );
-    } finally {
-      setProcessingSale(false);
-    }
+    setTimeout(() => {
+      barcodeInputRef.current?.focus();
+    }, 100);
   };
 
   // ==========================================
@@ -560,923 +938,1738 @@ function POS() {
   return (
     <div className="pos-page">
 
-      {/* PAGE HEADER */}
-      <div className="page-header">
-        <div>
-          <h1>Point of Sale</h1>
+      {/* ======================================
+          HEADER
+      ====================================== */}
 
-          <p>
-            Create a new sale and generate an invoice.
-          </p>
-        </div>
-      </div>
+      <div className="pos-header">
 
-      <div className="pos-content">
+        <div className="pos-header-main">
 
-        {/* BARCODE SCANNER */}
-        <div className="pos-barcode-scan">
-          <input
-            type="text"
-            placeholder="Scan barcode or type and press Enter..."
-            value={barcodeInput}
-            onChange={(e) => {
-              setBarcodeInput(
-                e.target.value
-              );
+          <div className="pos-header-icon">
+            <ShoppingCart size={23} />
+          </div>
 
-              if (barcodeError) {
-                setBarcodeError("");
-              }
-            }}
-            onKeyDown={
-              handleBarcodeScan
-            }
-            autoFocus
-          />
+          <div>
+            <div className="pos-eyebrow">
+              SALES WORKSPACE
+            </div>
 
-          {barcodeError && (
-            <p className="pos-barcode-error">
-              {barcodeError}
-            </p>
-          )}
-        </div>
+            <h1>Point of Sale</h1>
 
-        {/* PRODUCT SEARCH */}
-        <input
-          type="text"
-          placeholder="Search product by name or barcode..."
-          value={searchTerm}
-          onChange={(e) =>
-            setSearchTerm(
-              e.target.value
-            )
-          }
-        />
-
-        {/* PRODUCTS */}
-        <div className="pos-products">
-
-          <h2>Products</h2>
-
-          {loading ? (
             <p>
-              Loading products...
+              Create sales, manage products and
+              generate invoices.
             </p>
-          ) : products.length === 0 ? (
-            <p>
-              No products found.
-            </p>
-          ) : (
-            products
-              .filter(
-                (product) =>
-                  product.name
-                    .toLowerCase()
-                    .includes(
-                      searchTerm.toLowerCase()
-                    ) ||
-                  product.barcode
-                    ?.toLowerCase()
-                    .includes(
-                      searchTerm.toLowerCase()
-                    )
-              )
-              .map((product) => (
-                <div key={product.id}>
-
-                  <strong>
-                    {product.name}
-                  </strong>
-
-                  <span>
-                    {" "}
-                    — {currency}{" "}
-                    {product.sale_price}
-                  </span>
-
-                  <span>
-                    {" "}
-                    | Stock:{" "}
-                    {product.stock}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      addProductToCart(
-                        product
-                      )
-                    }
-                  >
-                    Add
-                  </button>
-
-                </div>
-              ))
-          )}
+          </div>
 
         </div>
 
-        {/* CUSTOMER */}
-        <div className="pos-customer">
-
-          <h2>Customer</h2>
+        <div className="pos-header-actions">
 
           <button
             type="button"
-            onClick={() =>
-              setShowCustomerForm(
-                true
-              )
-            }
+            className="pos-header-btn"
+            onClick={() => {
+              barcodeInputRef.current?.focus();
+            }}
           >
-            + Add Customer
+            <Barcode size={17} />
+            Scan Barcode
           </button>
 
-          <select
-            value={selectedCustomer}
-            onChange={(e) =>
-              setSelectedCustomer(
-                e.target.value
-              )
-            }
+          <button
+            type="button"
+            className="pos-header-btn primary"
+            onClick={() => setShowCustomerForm(true)}
           >
-            <option value="">
-              Walk-in Customer
-            </option>
+            <UserPlus size={17} />
+            Add Customer
+          </button>
 
-            {customers.map(
-              (customer) => (
-                <option
-                  key={customer.id}
-                  value={
-                    customer.id
-                  }
-                >
-                  {customer.name}
+        </div>
 
-                  {customer.phone
-                    ? ` - ${customer.phone}`
-                    : ""}
+      </div>
 
-                  {` | Due: ${currency} ${
-                    customer.current_due ??
-                    0
-                  }`}
-                </option>
-              )
-            )}
+      {/* ======================================
+          POS LAYOUT
+      ====================================== */}
 
-          </select>
+      <div className="pos-layout">
 
-          {selectedCustomer && (
-            <p>
-              Current Due:{" "}
-              {currency}{" "}
-              {
-                customers.find(
-                  (customer) =>
-                    String(
-                      customer.id
-                    ) ===
-                    String(
-                      selectedCustomer
-                    )
-                )?.current_due ?? 0
-              }
-            </p>
-          )}
+        {/* ====================================
+            PRODUCTS SECTION
+        ==================================== */}
 
-          {showCustomerForm && (
+        <section className="pos-products-section">
+
+          <div className="pos-section-header">
+
             <div>
+              <div className="pos-section-kicker">
+                INVENTORY
+              </div>
 
-              <h3>
-                Add Customer
-              </h3>
+              <h2>
+                Products
+              </h2>
+
+              <p>
+                Select a product or scan its barcode.
+              </p>
+            </div>
+
+            <div className="pos-product-count">
+              <Package size={16} />
+              {products.length} Products
+            </div>
+
+          </div>
+
+          {/* BARCODE SCANNER */}
+
+          <div className="barcode-section">
+
+            <div className="barcode-section-icon">
+              <Barcode size={23} />
+            </div>
+
+            <div className="barcode-input-area">
+
+              <label>
+                QUICK BARCODE SCANNER
+              </label>
 
               <input
+                ref={barcodeInputRef}
                 type="text"
-                placeholder="Customer name"
-                value={
-                  customerName
-                }
-                onChange={(e) =>
-                  setCustomerName(
-                    e.target.value
-                  )
-                }
+                placeholder="Scan barcode or type barcode and press Enter..."
+                value={barcodeInput}
+                onChange={(event) => {
+                  setBarcodeInput(event.target.value);
+
+                  if (barcodeError) {
+                    setBarcodeError("");
+                  }
+                }}
+                onKeyDown={handleBarcodeScan}
+                autoFocus
               />
 
-              <input
-                type="text"
-                placeholder="Phone number"
-                value={
-                  customerPhone
-                }
-                onChange={(e) =>
-                  setCustomerPhone(
-                    e.target.value
-                  )
-                }
-              />
+            </div>
 
-              <button
-                type="button"
-                onClick={
-                  handleSaveCustomer
-                }
-              >
-                Save Customer
-              </button>
+            <div className="barcode-enter-hint">
+              <span>ENTER</span>
+            </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setShowCustomerForm(
-                    false
-                  )
-                }
-              >
-                Cancel
-              </button>
+          </div>
 
+          {barcodeError && (
+            <div className="pos-barcode-error">
+              <AlertTriangle size={16} />
+              {barcodeError}
             </div>
           )}
 
-        </div>
+          {/* SEARCH */}
 
-        {/* CART */}
-        <div className="pos-cart">
+          <div className="product-search">
 
-          <h2>Cart</h2>
+            <Search size={18} />
 
-          <button
-            type="button"
-            onClick={() =>
-              setCart([])
-            }
-          >
-            Clear Cart
-          </button>
+            <input
+              type="text"
+              placeholder="Search product by name or barcode..."
+              value={searchTerm}
+              onChange={(event) =>
+                setSearchTerm(event.target.value)
+              }
+            />
 
-          {cart.length === 0 ? (
-            <p>
-              Cart is empty.
-            </p>
-          ) : (
-            cart.map((item) => (
-              <div key={item.id}>
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+              >
+                <X size={16} />
+              </button>
+            )}
 
-                <strong>
-                  {item.name}
-                </strong>
+          </div>
 
-                <div>
+          {/* PRODUCTS */}
 
-                  {/* DECREASE */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCart(
-                        (currentCart) =>
-                          currentCart
-                            .map(
-                              (
-                                cartItem
-                              ) =>
-                                cartItem.id ===
-                                item.id
-                                  ? {
-                                      ...cartItem,
-                                      quantity:
-                                        cartItem.quantity -
-                                        1,
-                                    }
-                                  : cartItem
-                            )
-                            .filter(
-                              (
-                                cartItem
-                              ) =>
-                                cartItem.quantity >
-                                0
-                            )
-                      );
-                    }}
-                  >
-                    −
-                  </button>
+          <div className="products-grid">
 
-                  <span>
-                    {" "}
-                    {item.quantity}{" "}
-                  </span>
+            {loading ? (
+              <div className="pos-loading">
 
-                  {/* INCREASE */}
-                  <button
-                    type="button"
-                    onClick={() => {
-
-                      if (
-                        item.quantity >=
-                        item.stock
-                      ) {
-                        showError(
-                          "Insufficient stock"
-                        );
-
-                        return;
-                      }
-
-                      setCart(
-                        (currentCart) =>
-                          currentCart.map(
-                            (
-                              cartItem
-                            ) =>
-                              cartItem.id ===
-                              item.id
-                                ? {
-                                    ...cartItem,
-                                    quantity:
-                                      cartItem.quantity +
-                                      1,
-                                  }
-                                : cartItem
-                          )
-                      );
-
-                    }}
-                  >
-                    +
-                  </button>
-
-                  {/* REMOVE */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCart(
-                        (currentCart) =>
-                          currentCart.filter(
-                            (
-                              cartItem
-                            ) =>
-                              cartItem.id !==
-                              item.id
-                          )
-                      );
-                    }}
-                  >
-                    Remove
-                  </button>
-
-                </div>
+                <RefreshCw
+                  size={22}
+                  className="pos-spin"
+                />
 
                 <span>
-                  {currency}{" "}
-                  {(
-                    Number(
-                      item.sale_price
-                    ) *
-                    Number(
-                      item.quantity
-                    )
-                  ).toLocaleString(
-                    undefined,
-                    {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }
-                  )}
+                  Loading products...
                 </span>
 
               </div>
-            ))
-          )}
+            ) : filteredProducts.length === 0 ? (
+              <div className="pos-empty">
 
-          {/* SUBTOTAL */}
-          <div className="cart-total">
+                <Package size={36} />
 
-            <strong>
-              Subtotal:{" "}
-              {currency}{" "}
-              {subtotal.toLocaleString(
-                undefined,
-                {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }
-              )}
-            </strong>
+                <h3>
+                  No products found
+                </h3>
+
+                <p>
+                  Try another search or scan a
+                  barcode.
+                </p>
+
+              </div>
+            ) : (
+              filteredProducts.map((product) => {
+
+                const stock = Number(
+                  product.stock || 0
+                );
+
+                const isOut = stock <= 0;
+
+                return (
+                  <button
+                    type="button"
+                    key={product.id}
+                    className={`product-card ${
+                      isOut ? "out-of-stock" : ""
+                    }`}
+                    onClick={() =>
+                      openBatchSelector(product)
+                    }
+                    disabled={isOut}
+                  >
+
+                    <div className="product-card-top">
+
+                      <div className="product-card-icon">
+
+                        {product.image_url ? (
+                          <img
+                            src={product.image_url}
+                            alt={product.name}
+                            onError={(event) => {
+                              event.currentTarget.style.display =
+                                "none";
+
+                              event.currentTarget.parentElement
+                                ?.querySelector(
+                                  ".product-image-fallback"
+                                )
+                                ?.classList.add("show");
+                            }}
+                          />
+                        ) : null}
+
+                        <div className="product-image-fallback">
+                          <Package size={20} />
+                        </div>
+
+                      </div>
+
+                      <span
+                        className={`product-stock-badge ${
+                          isOut
+                            ? "danger"
+                            : stock <= 5
+                            ? "warning"
+                            : "success"
+                        }`}
+                      >
+                        {isOut
+                          ? "Out"
+                          : `${stock} in stock`}
+                      </span>
+
+                    </div>
+
+                    <div className="product-card-name">
+                      {product.name}
+                    </div>
+
+                    <div className="product-card-barcode">
+                      <Barcode size={13} />
+                      {product.barcode || "No barcode"}
+                    </div>
+
+                    <div className="product-card-bottom">
+
+                      <div>
+                        <span>
+                          PRICE
+                        </span>
+
+                        <strong>
+                          {currency}{" "}
+                          {formatMoney(
+                            product.sale_price
+                          )}
+                        </strong>
+                      </div>
+
+                      <div className="product-add-icon">
+                        <Plus size={17} />
+                      </div>
+
+                    </div>
+
+                  </button>
+                );
+              })
+            )}
 
           </div>
 
-          {/* DISCOUNT */}
-          <div className="cart-discount">
+        </section>
 
-            <label>
-              Discount ({currency})
-            </label>
+        {/* ====================================
+            CART SECTION
+        ==================================== */}
 
-            <input
-              type="number"
-              min="0"
-              value={discount}
-              onChange={(e) =>
-                setDiscount(
-                  Number(
-                    e.target.value
-                  )
-                )
-              }
-            />
+        <aside className="pos-cart-section">
 
-          </div>
+          <div className="cart-header">
 
-          {/* TAX */}
-          <div className="cart-tax">
+            <div className="cart-title">
 
-            <strong>
-              Tax ({taxRate}%):{" "}
-              {currency}{" "}
-              {taxAmount.toLocaleString(
-                undefined,
-                {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }
-              )}
-            </strong>
+              <div className="cart-title-icon">
+                <ShoppingCart size={19} />
+              </div>
 
-          </div>
+              <div>
+                <h2>Current Sale</h2>
 
-          {/* GRAND TOTAL */}
-          <div className="cart-grand-total">
+                <p>
+                  {cartItemCount} item
+                  {cartItemCount !== 1 ? "s" : ""}
+                </p>
+              </div>
 
-            <strong>
-              Grand Total:{" "}
-              {currency}{" "}
-              {grandTotal.toLocaleString(
-                undefined,
-                {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }
-              )}
-            </strong>
+            </div>
 
-          </div>
-
-          {/* PAYMENT */}
-          <div className="payment-section">
-
-            <label>
-              Paid Amount ({currency})
-            </label>
-
-            <input
-              type="number"
-              min="0"
-              value={paidAmount}
-              onChange={(e) =>
-                setPaidAmount(
-                  Number(
-                    e.target.value
-                  )
-                )
-              }
-            />
-
-            <label>
-              Payment Method
-            </label>
-
-            <select
-              value={paymentMethod}
-              onChange={(e) =>
-                setPaymentMethod(
-                  e.target.value
-                )
-              }
+            <button
+              type="button"
+              className="cart-clear-btn"
+              onClick={clearCart}
+              disabled={cart.length === 0}
             >
-              <option value="cash">
-                Cash
-              </option>
-
-              <option value="bank">
-                Bank
-              </option>
-
-              <option value="easypaisa">
-                Easypaisa
-              </option>
-
-              <option value="jazzcash">
-                JazzCash
-              </option>
-            </select>
-
-          </div>
-
-          {/* PAYMENT SUMMARY */}
-          <div className="payment-summary">
-
-            <strong>
-              {paidAmount >=
-              grandTotal
-                ? "Change"
-                : "Due"}
-              :{" "}
-              {currency}{" "}
-              {paymentDifference.toLocaleString(
-                undefined,
-                {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }
-              )}
-            </strong>
-
-          </div>
-
-          {/* COMPLETE SALE */}
-          <button
-            type="button"
-            disabled={
-              processingSale
-            }
-            onClick={
-              handleCompleteSale
-            }
-          >
-            {processingSale
-              ? "Processing..."
-              : "Complete Sale"}
-          </button>
-
-        </div>
-
-      </div>
-
-      {/* ========================================
-          INVOICE
-      ======================================== */}
-
-      {invoice && (
-        <div
-          className={`invoice-preview ${
-            printMode === "thermal"
-              ? "thermal-receipt"
-              : "a4-receipt"
-          }`}
-        >
-
-          {/* INVOICE HEADER */}
-          <div className="invoice-header">
-
-            <div>
-
-              <h2>
-                {settings?.store_name ||
-                  "General Store"}
-              </h2>
-
-              {settings?.store_phone && (
-                <p>
-                  Phone:{" "}
-                  {settings.store_phone}
-                </p>
-              )}
-
-              {settings?.store_address && (
-                <p>
-                  {settings.store_address}
-                </p>
-              )}
-
-            </div>
-
-            <div className="invoice-meta">
-
-              <p>
-                <strong>
-                  Invoice #:
-                </strong>{" "}
-                {
-                  invoice.invoice
-                    .invoice_number
-                }
-              </p>
-
-              {/* FIXED DATE/TIME */}
-              <p>
-                <strong>
-                  Date:
-                </strong>{" "}
-                {formatInvoiceDate(
-                  invoice.invoice
-                    .created_at
-                )}
-              </p>
-
-              <p>
-                <strong>
-                  Cashier:
-                </strong>{" "}
-                {
-                  invoice.invoice
-                    .cashier_username ||
-                  "-"
-                }
-              </p>
-
-            </div>
+              <Trash2 size={15} />
+              Clear
+            </button>
 
           </div>
 
           {/* CUSTOMER */}
-          <div className="invoice-customer">
 
-            <p>
-              <strong>
-                Customer:
-              </strong>{" "}
-              {
-                invoice.invoice
-                  .customer_name ||
-                "Walk-in Customer"
-              }
-            </p>
+          <div className="customer-section">
 
-            <p>
-              <strong>
-                Phone:
-              </strong>{" "}
-              {
-                invoice.invoice
-                  .customer_phone ||
-                "N/A"
-              }
-            </p>
+            <div className="customer-section-header">
+
+              <div className="customer-label">
+                <UserRound size={16} />
+                Customer
+              </div>
+
+              <button
+                type="button"
+                className="customer-add-btn"
+                onClick={() =>
+                  setShowCustomerForm(true)
+                }
+              >
+                <Plus size={14} />
+                Add
+              </button>
+
+            </div>
+
+            <div className="customer-select-wrapper">
+
+              <UserRound size={17} />
+
+              <select
+                value={selectedCustomer}
+                onChange={(event) =>
+                  setSelectedCustomer(
+                    event.target.value
+                  )
+                }
+              >
+
+                <option value="">
+                  Walk-in Customer
+                </option>
+
+                {customers.map((customer) => (
+                  <option
+                    key={customer.id}
+                    value={customer.id}
+                  >
+                    {customer.name}
+                    {customer.phone
+                      ? ` - ${customer.phone}`
+                      : ""}
+                  </option>
+                ))}
+
+              </select>
+
+            </div>
+
+            {selectedCustomerData && (
+              <div className="customer-due-info">
+
+                <span>
+                  Current Due
+                </span>
+
+                <strong>
+                  {currency}{" "}
+                  {formatMoney(
+                    selectedCustomerData.current_due
+                  )}
+                </strong>
+
+              </div>
+            )}
 
           </div>
 
-          {/* ITEMS TABLE */}
-          <table>
+          {/* CART ITEMS */}
 
-            <thead>
-              <tr>
+          <div className="cart-items">
 
-                <th>
-                  Product
-                </th>
+            {cart.length === 0 ? (
+              <div className="cart-empty">
 
-                <th>
-                  Barcode
-                </th>
+                <div className="cart-empty-icon">
+                  <ShoppingCart size={26} />
+                </div>
 
-                <th>
-                  Qty
-                </th>
+                <h3>
+                  Your cart is empty
+                </h3>
 
-                <th>
-                  Unit
-                </th>
+                <p>
+                  Select a product or scan a
+                  barcode to start a sale.
+                </p>
 
-                <th>
-                  Price
-                </th>
+              </div>
+            ) : (
+              cart.map((item) => (
+                <div
+                  className="cart-item"
+                  key={`${item.id}-${item.batch_id ?? "no-batch"}`}
+                >
 
-                <th>
-                  Total
-                </th>
+                  <div className="cart-item-main">
 
-              </tr>
-            </thead>
+                    <div className="cart-item-info">
 
-            <tbody>
+                      <div className="cart-item-icon">
 
-              {invoice.items.map(
-                (item) => (
-                  <tr key={item.id}>
+                        {item.image_url ? (
+                          <img
+                            src={item.image_url}
+                            alt={item.name}
+                            onError={(event) => {
+                              event.currentTarget.style.display =
+                                "none";
 
-                    <td>
-                      {
-                        item.product_name
+                              event.currentTarget.parentElement
+                                ?.querySelector(
+                                  ".cart-image-fallback"
+                                )
+                                ?.classList.add("show");
+                            }}
+                          />
+                        ) : null}
+
+                        <div className="cart-image-fallback">
+                          <Package size={17} />
+                        </div>
+
+                      </div>
+
+                      <div>
+
+                        <div className="cart-item-name">
+                          {item.name}
+                        </div>
+
+                        <div className="cart-item-batch">
+                          <Barcode size={11} />
+                          {item.barcode || "No barcode"}
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                    <button
+                      type="button"
+                      className="cart-remove"
+                      onClick={() =>
+                        removeFromCart(item)
                       }
-                    </td>
+                    >
+                      <X size={15} />
+                    </button>
 
-                    <td>
-                      {
-                        item.barcode ||
-                        "-"
-                      }
-                    </td>
+                  </div>
 
-                    <td>
-                      {
-                        item.quantity
-                      }
-                    </td>
+                  <div className="cart-item-meta">
 
-                    <td>
-                      {
-                        item.unit ||
-                        "-"
-                      }
-                    </td>
+                    <span>
+                      <Layers3 size={12} />
+                      Batch:{" "}
+                      {item.batch_number || "-"}
+                    </span>
 
-                    <td>
-                      {currency}{" "}
-                      {
-                        item.unit_price
-                      }
-                    </td>
+                    <span>
+                      <CalendarDays size={12} />
+                      {item.expiry_date || "No expiry"}
+                    </span>
 
-                    <td>
-                      {currency}{" "}
-                      {item.total}
-                    </td>
+                  </div>
 
-                  </tr>
-                )
-              )}
+                  <div className="cart-item-bottom">
 
-            </tbody>
+                    <div className="cart-item-controls">
 
-          </table>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          decreaseQuantity(item)
+                        }
+                      >
+                        <Minus size={14} />
+                      </button>
 
-          {/* INVOICE SUMMARY */}
-          <div className="invoice-summary">
+                      <strong>
+                        {item.quantity}
+                      </strong>
 
-            <p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          increaseQuantity(item)
+                        }
+                      >
+                        <Plus size={14} />
+                      </button>
+
+                    </div>
+
+                    <div className="cart-item-price">
+
+                      <span>
+                        {currency}{" "}
+                        {formatMoney(
+                          item.sale_price
+                        )}{" "}
+                        ×{" "}
+                        {item.quantity}
+                      </span>
+
+                      <strong>
+                        {currency}{" "}
+                        {formatMoney(
+                          Number(item.sale_price) *
+                            Number(item.quantity)
+                        )}
+                      </strong>
+
+                    </div>
+
+                  </div>
+
+                </div>
+              ))
+            )}
+
+          </div>
+
+          {/* ADJUSTMENTS */}
+
+          <div className="cart-adjustments">
+
+            <div className="adjustment-row">
+
+              <div>
+                <Tag size={15} />
+                Discount
+              </div>
+
+              <div className="adjustment-input">
+
+                <span>
+                  {currency}
+                </span>
+
+                <input
+                  type="number"
+                  min="0"
+                  value={discount}
+                  onChange={(event) =>
+                    setDiscount(
+                      Number(event.target.value)
+                    )
+                  }
+                />
+
+              </div>
+
+            </div>
+
+            <div className="adjustment-row tax-row">
+
+              <div>
+                <Percent size={15} />
+                Tax
+              </div>
+
+              <strong>
+                {taxRate}% · {currency}{" "}
+                {formatMoney(taxAmount)}
+              </strong>
+
+            </div>
+
+          </div>
+
+          {/* SUMMARY */}
+
+          <div className="cart-summary">
+
+            <div className="cart-summary-row">
+
               <span>
                 Subtotal
               </span>
 
-              <span>
+              <strong>
                 {currency}{" "}
-                {
-                  invoice.invoice
-                    .subtotal
-                }
-              </span>
-            </p>
+                {formatMoney(subtotal)}
+              </strong>
 
-            <p>
+            </div>
+
+            <div className="cart-summary-row discount-summary">
+
               <span>
                 Discount
               </span>
 
+              <strong>
+                - {currency}{" "}
+                {formatMoney(finalDiscount)}
+              </strong>
+
+            </div>
+
+            <div className="cart-summary-row">
+
               <span>
+                Tax
+              </span>
+
+              <strong>
                 {currency}{" "}
-                {
-                  invoice.invoice
-                    .discount
-                }
-              </span>
-            </p>
+                {formatMoney(taxAmount)}
+              </strong>
 
-            <p>
-              <span>
-                Tax (
-                {invoice.invoice
-                  .tax_rate ||
-                  0}
-                %)
-              </span>
+            </div>
 
-              <span>
+            <div className="grand-total">
+
+              <div>
+                <span>
+                  Grand Total
+                </span>
+
+                <small>
+                  Payable amount
+                </small>
+              </div>
+
+              <strong>
                 {currency}{" "}
-                {
-                  invoice.invoice
-                    .tax_amount ||
-                  0
-                }
-              </span>
-            </p>
+                {formatMoney(grandTotal)}
+              </strong>
 
-            <p className="invoice-grand-total">
-
-              <span>
-                Grand Total
-              </span>
-
-              <span>
-                {currency}{" "}
-                {
-                  invoice.invoice
-                    .grand_total
-                }
-              </span>
-
-            </p>
-
-            <p>
-              <span>
-                Paid
-              </span>
-
-              <span>
-                {currency}{" "}
-                {
-                  invoice.invoice
-                    .paid_amount
-                }
-              </span>
-            </p>
-
-            <p>
-              <span>
-                Due
-              </span>
-
-              <span>
-                {currency}{" "}
-                {
-                  invoice.invoice
-                    .due_amount
-                }
-              </span>
-            </p>
-
-            <p>
-              <span>
-                Payment Method
-              </span>
-
-              <span>
-                {
-                  invoice.invoice
-                    .payment_method
-                }
-              </span>
-            </p>
-
-            <p>
-              <span>
-                Status
-              </span>
-
-              <span>
-                {Number(
-                  invoice.invoice
-                    .due_amount
-                ) === 0
-                  ? "Paid"
-                  : Number(
-                      invoice.invoice
-                        .paid_amount
-                    ) > 0
-                  ? "Partial"
-                  : "Due"}
-              </span>
-            </p>
+            </div>
 
           </div>
 
-          {/* FOOTER */}
-          <p className="invoice-footer-text">
+          {/* PAYMENT */}
 
-            {settings?.invoice_footer ||
-              "Thank you for shopping with us!"}
+          <div className="payment-section">
 
-          </p>
+            <div className="payment-section-heading">
 
-          {/* PRINT ACTIONS */}
-          <div className="invoice-print-actions">
+              <div className="payment-heading-icon">
+                <WalletCards size={17} />
+              </div>
 
-            <button
-              type="button"
-              onClick={() => {
+              <div>
 
-                setPrintMode("a4");
+                <h3>
+                  Payment
+                </h3>
 
-                setTimeout(() => {
-                  window.print();
-                }, 300);
+                <p>
+                  Choose payment method
+                </p>
 
-              }}
-            >
-              Print A4
-            </button>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => {
+            </div>
 
-                setPrintMode(
-                  "thermal"
+            <div className="payment-method-grid">
+
+              {[
+                {
+                  value: "cash",
+                  label: "Cash",
+                  icon: Banknote,
+                },
+                {
+                  value: "bank",
+                  label: "Bank",
+                  icon: CreditCard,
+                },
+                {
+                  value: "easypaisa",
+                  label: "Easypaisa",
+                  icon: WalletCards,
+                },
+                {
+                  value: "jazzcash",
+                  label: "JazzCash",
+                  icon: WalletCards,
+                },
+              ].map((method) => {
+
+                const Icon = method.icon;
+
+                return (
+                  <button
+                    type="button"
+                    key={method.value}
+                    className={`payment-method-btn ${
+                      paymentMethod === method.value
+                        ? "active"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      setPaymentMethod(
+                        method.value
+                      )
+                    }
+                  >
+                    <Icon size={16} />
+                    {method.label}
+                  </button>
                 );
+              })}
 
-                setTimeout(() => {
-                  window.print();
-                }, 300);
+            </div>
 
-              }}
+            <label className="paid-label">
+              Amount Received
+            </label>
+
+            <div className="paid-input-wrapper">
+
+              <span>
+                {currency}
+              </span>
+
+              <input
+                type="number"
+                min="0"
+                value={paidAmount}
+                onChange={(event) =>
+                  setPaidAmount(
+                    Number(event.target.value)
+                  )
+                }
+              />
+
+            </div>
+
+            <div
+              className={`payment-result ${
+                paid >= grandTotal
+                  ? "change"
+                  : "due"
+              }`}
             >
-              Print Thermal Receipt
-            </button>
+
+              <div>
+                {paid >= grandTotal
+                  ? "Change"
+                  : "Due"}
+              </div>
+
+              <strong>
+                {currency}{" "}
+                {formatMoney(
+                  paid >= grandTotal
+                    ? changeAmount
+                    : dueAmount
+                )}
+              </strong>
+
+            </div>
+
+          </div>
+
+          {/* CHECKOUT */}
+
+          <button
+            type="button"
+            className="checkout-button"
+            disabled={
+              processingSale ||
+              cart.length === 0
+            }
+            onClick={handleCheckout}
+          >
+
+            {processingSale ? (
+              <>
+                <RefreshCw
+                  size={18}
+                  className="pos-spin"
+                />
+
+                Processing Sale...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={18} />
+
+                Complete Sale
+
+                <ArrowRight size={17} />
+              </>
+            )}
+
+          </button>
+
+        </aside>
+
+      </div>
+
+      {/* ======================================
+          NEW PRODUCT MODAL
+      ====================================== */}
+
+      {showNewProductForm && (
+        <div className="new-product-modal">
+
+          <div className="new-product-dialog">
+
+            <div className="modal-header">
+
+              <div className="modal-header-icon blue">
+                <Package size={21} />
+              </div>
+
+              <div>
+
+                <div className="modal-eyebrow">
+                  NEW INVENTORY ITEM
+                </div>
+
+                <h2>
+                  Create Product
+                </h2>
+
+                <p>
+                  Barcode was not found. Add
+                  the product details below.
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeNewProductForm}
+                disabled={savingNewProduct}
+              >
+                <X size={19} />
+              </button>
+
+            </div>
+
+            <div className="new-product-barcode">
+
+              <Barcode size={17} />
+
+              <div>
+
+                <span>
+                  SCANNED BARCODE
+                </span>
+
+                <strong>
+                  {newProductBarcode || "-"}
+                </strong>
+
+              </div>
+
+            </div>
+
+            <div className="form-row">
+
+              <div className="form-group full">
+
+                <label>
+                  Product Name
+                </label>
+
+                <input
+                  type="text"
+                  placeholder="Enter product name"
+                  value={newProductName}
+                  onChange={(event) =>
+                    setNewProductName(
+                      event.target.value
+                    )
+                  }
+                  autoFocus
+                />
+
+              </div>
+
+            </div>
+
+            <div className="form-row">
+
+              <div className="form-group">
+
+                <label>
+                  Purchase Price
+                </label>
+
+                <div className="input-with-prefix">
+
+                  <span>
+                    {currency}
+                  </span>
+
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={
+                      newProductPurchasePrice
+                    }
+                    onChange={(event) =>
+                      setNewProductPurchasePrice(
+                        event.target.value
+                      )
+                    }
+                  />
+
+                </div>
+
+              </div>
+
+              <div className="form-group">
+
+                <label>
+                  Sale Price
+                </label>
+
+                <div className="input-with-prefix">
+
+                  <span>
+                    {currency}
+                  </span>
+
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={
+                      newProductSalePrice
+                    }
+                    onChange={(event) =>
+                      setNewProductSalePrice(
+                        event.target.value
+                      )
+                    }
+                  />
+
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="form-row">
+
+              <div className="form-group">
+
+                <label>
+                  Opening Stock
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={newProductStock}
+                  onChange={(event) =>
+                    setNewProductStock(
+                      event.target.value
+                    )
+                  }
+                />
+
+              </div>
+
+              <div className="form-group">
+
+                <label>
+                  Unit
+                </label>
+
+                <select
+                  value={newProductUnit}
+                  onChange={(event) =>
+                    setNewProductUnit(
+                      event.target.value
+                    )
+                  }
+                >
+
+                  <option value="piece">
+                    Piece
+                  </option>
+
+                  <option value="kg">
+                    Kilogram
+                  </option>
+
+                  <option value="gram">
+                    Gram
+                  </option>
+
+                  <option value="litre">
+                    Litre
+                  </option>
+
+                  <option value="ml">
+                    Millilitre
+                  </option>
+
+                  <option value="box">
+                    Box
+                  </option>
+
+                  <option value="pack">
+                    Pack
+                  </option>
+
+                  <option value="dozen">
+                    Dozen
+                  </option>
+
+                </select>
+
+              </div>
+
+            </div>
+
+            <div className="modal-actions">
+
+              <button
+                type="button"
+                className="modal-secondary-btn"
+                onClick={closeNewProductForm}
+                disabled={savingNewProduct}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="modal-primary-btn"
+                onClick={handleSaveNewProduct}
+                disabled={savingNewProduct}
+              >
+
+                {savingNewProduct ? (
+                  <>
+                    <RefreshCw
+                      size={17}
+                      className="pos-spin"
+                    />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={17} />
+                    Save & Add to Cart
+                  </>
+                )}
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================
+          CUSTOMER MODAL
+      ====================================== */}
+
+      {showCustomerForm && (
+        <div className="customer-modal-overlay">
+
+          <div className="customer-modal">
+
+            <div className="modal-header">
+
+              <div className="modal-header-icon blue">
+                <UserPlus size={21} />
+              </div>
+
+              <div>
+
+                <div className="modal-eyebrow">
+                  CUSTOMER MANAGEMENT
+                </div>
+
+                <h2>
+                  Add Customer
+                </h2>
+
+                <p>
+                  Create a customer for this sale.
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() =>
+                  setShowCustomerForm(false)
+                }
+                disabled={savingCustomer}
+              >
+                <X size={19} />
+              </button>
+
+            </div>
+
+            <div className="form-group">
+
+              <label>
+                Customer Name
+              </label>
+
+              <input
+                type="text"
+                placeholder="Enter customer name"
+                value={customerName}
+                onChange={(event) =>
+                  setCustomerName(
+                    event.target.value
+                  )
+                }
+                autoFocus
+              />
+
+            </div>
+
+            <div className="form-group">
+
+              <label>
+                Phone Number
+              </label>
+
+              <input
+                type="text"
+                placeholder="Enter phone number"
+                value={customerPhone}
+                onChange={(event) =>
+                  setCustomerPhone(
+                    event.target.value
+                  )
+                }
+              />
+
+            </div>
+
+            <div className="modal-actions">
+
+              <button
+                type="button"
+                className="modal-secondary-btn"
+                onClick={() =>
+                  setShowCustomerForm(false)
+                }
+                disabled={savingCustomer}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="modal-primary-btn"
+                onClick={handleSaveCustomer}
+                disabled={savingCustomer}
+              >
+
+                {savingCustomer ? (
+                  <>
+                    <RefreshCw
+                      size={17}
+                      className="pos-spin"
+                    />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus size={17} />
+                    Save Customer
+                  </>
+                )}
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================
+          BATCH MODAL
+      ====================================== */}
+
+      {batchModalOpen && (
+        <div
+          className="batch-modal-overlay"
+          onClick={closeBatchSelector}
+        >
+
+          <div
+            className="batch-modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+
+            <div className="batch-modal-header">
+
+              <div className="batch-modal-title">
+
+                <div className="batch-modal-icon">
+                  <Layers3 size={20} />
+                </div>
+
+                <div>
+
+                  <div className="modal-eyebrow">
+                    INVENTORY
+                  </div>
+
+                  <h2>
+                    Select Batch
+                  </h2>
+
+                  <p>
+                    {selectedProductForBatch?.name ||
+                      "Product"}
+                  </p>
+
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={closeBatchSelector}
+              >
+                <X size={19} />
+              </button>
+
+            </div>
+
+            {loadingBatches ? (
+              <div className="batch-modal-state">
+
+                <RefreshCw
+                  size={24}
+                  className="pos-spin"
+                />
+
+                <p>
+                  Loading available batches...
+                </p>
+
+              </div>
+            ) : productBatches.length === 0 ? (
+              <div className="batch-modal-state">
+
+                <AlertTriangle size={28} />
+
+                <h3>
+                  No batches found
+                </h3>
+
+                <p>
+                  This product does not have
+                  any available batches.
+                </p>
+
+                <button
+                  type="button"
+                  className="modal-secondary-btn"
+                  onClick={closeBatchSelector}
+                >
+                  Close
+                </button>
+
+              </div>
+            ) : (
+              <div className="batch-list">
+
+                {productBatches.map((batch) => {
+
+                  const batchStock = Number(
+                    batch.quantity || 0
+                  );
+
+                  const today = new Date()
+                    .toISOString()
+                    .split("T")[0];
+
+                  const expired =
+                    batch.expiry_date &&
+                    batch.expiry_date < today;
+
+                  const outOfStock =
+                    batchStock <= 0;
+
+                  const disabled =
+                    expired || outOfStock;
+
+                  return (
+                    <button
+                      type="button"
+                      key={batch.id}
+                      disabled={disabled}
+                      className={`batch-option ${
+                        disabled
+                          ? "batch-disabled"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        handleBatchSelect(batch)
+                      }
+                    >
+
+                      <div className="batch-option-main">
+
+                        <div className="batch-option-icon">
+                          <Layers3 size={18} />
+                        </div>
+
+                        <div>
+
+                          <strong>
+                            Batch{" "}
+                            {batch.batch_number || "-"}
+                          </strong>
+
+                          <span>
+                            {batch.expiry_date
+                              ? `Expiry: ${batch.expiry_date}`
+                              : "No expiry date"}
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                      <div className="batch-option-status">
+
+                        <strong>
+                          {batchStock}
+                        </strong>
+
+                        <span>
+                          Stock
+                        </span>
+
+                        {expired && (
+                          <em>
+                            Expired
+                          </em>
+                        )}
+
+                        {!expired && outOfStock && (
+                          <em>
+                            Out of Stock
+                          </em>
+                        )}
+
+                      </div>
+
+                      {!disabled && (
+                        <ChevronRight size={17} />
+                      )}
+
+                    </button>
+                  );
+                })}
+
+              </div>
+            )}
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================
+          INVOICE MODAL
+      ====================================== */}
+
+      {showInvoice && invoice && (
+        <div className="invoice-overlay">
+
+          <div className="invoice-modal">
+
+            <div className="invoice-modal-toolbar">
+
+              <div>
+
+                <div className="modal-eyebrow">
+                  SALE COMPLETED
+                </div>
+
+                <h2>
+                  Invoice Ready
+                </h2>
+
+              </div>
+
+              <div className="invoice-toolbar-actions">
+
+                <button
+                  type="button"
+                  className="invoice-print-btn"
+                  onClick={printInvoice}
+                >
+                  <Printer size={16} />
+                  Print Invoice
+                </button>
+
+                <button
+                  type="button"
+                  className="invoice-close-btn"
+                  onClick={closeInvoice}
+                >
+                  <X size={18} />
+                </button>
+
+              </div>
+
+            </div>
+
+            <div className="invoice-print-area">
+
+              <div className="invoice-head">
+
+                <div>
+
+                  <div className="invoice-brand">
+                    {settings?.store_name ||
+                      "NEXA POS"}
+                  </div>
+
+                  {settings?.store_phone && (
+                    <p>
+                      {settings.store_phone}
+                    </p>
+                  )}
+
+                  {settings?.store_address && (
+                    <p>
+                      {settings.store_address}
+                    </p>
+                  )}
+
+                </div>
+
+                <div className="invoice-number-box">
+
+                  <span>
+                    INVOICE
+                  </span>
+
+                  <strong>
+                    {
+                      invoice.invoice
+                        .invoice_number
+                    }
+                  </strong>
+
+                  <small>
+                    {formatInvoiceDate(
+                      invoice.invoice.created_at
+                    )}
+                  </small>
+
+                </div>
+
+              </div>
+
+              <div className="invoice-info-grid">
+
+                <div className="invoice-info-card">
+
+                  <UserRound size={16} />
+
+                  <div>
+
+                    <span>
+                      CUSTOMER
+                    </span>
+
+                    <strong>
+                      {invoice.invoice.customer_name ||
+                        "Walk-in Customer"}
+                    </strong>
+
+                    <small>
+                      {invoice.invoice.customer_phone ||
+                        "No phone"}
+                    </small>
+
+                  </div>
+
+                </div>
+
+                <div className="invoice-info-card">
+
+                  <Receipt size={16} />
+
+                  <div>
+
+                    <span>
+                      CASHIER
+                    </span>
+
+                    <strong>
+                      {invoice.invoice.cashier || "-"}
+                    </strong>
+
+                    <small>
+                      Payment:{" "}
+                      {invoice.invoice.payment_method}
+                    </small>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              <table className="invoice-items">
+
+                <thead>
+
+                  <tr>
+                    <th>Product</th>
+                    <th>Barcode</th>
+                    <th>Qty</th>
+                    <th>Price</th>
+                    <th>Total</th>
+                  </tr>
+
+                </thead>
+
+                <tbody>
+
+                  {invoice.items.map((item) => (
+                    <tr key={item.id}>
+
+                      <td>
+                        {item.product_name}
+                      </td>
+
+                      <td>
+                        {item.barcode || "-"}
+                      </td>
+
+                      <td>
+                        {item.quantity}
+                      </td>
+
+                      <td>
+                        {currency}{" "}
+                        {item.unit_price}
+                      </td>
+
+                      <td>
+                        {currency}{" "}
+                        {item.total}
+                      </td>
+
+                    </tr>
+                  ))}
+
+                </tbody>
+
+              </table>
+
+              <div className="invoice-summary">
+
+                <div className="invoice-summary-row">
+
+                  <span>
+                    Subtotal
+                  </span>
+
+                  <strong>
+                    {currency}{" "}
+                    {invoice.invoice.subtotal}
+                  </strong>
+
+                </div>
+
+                <div className="invoice-summary-row">
+
+                  <span>
+                    Discount
+                  </span>
+
+                  <strong>
+                    {currency}{" "}
+                    {invoice.invoice.discount}
+                  </strong>
+
+                </div>
+
+                <div className="invoice-summary-row">
+
+                  <span>
+                    Tax (
+                    {invoice.invoice.tax_rate || 0}
+                    %)
+                  </span>
+
+                  <strong>
+                    {currency}{" "}
+                    {invoice.invoice.tax || 0}
+                  </strong>
+
+                </div>
+
+                <div className="invoice-grand-total">
+
+                  <span>
+                    Grand Total
+                  </span>
+
+                  <strong>
+                    {currency}{" "}
+                    {invoice.invoice.total}
+                  </strong>
+
+                </div>
+
+                <div className="invoice-summary-row">
+
+                  <span>
+                    Paid
+                  </span>
+
+                  <strong>
+                    {currency}{" "}
+                    {invoice.invoice.paid_amount}
+                  </strong>
+
+                </div>
+
+                <div className="invoice-summary-row">
+
+                  <span>
+                    Due
+                  </span>
+
+                  <strong>
+                    {currency}{" "}
+                    {invoice.invoice.due_amount}
+                  </strong>
+
+                </div>
+
+              </div>
+
+              <div className="invoice-footer">
+
+                <strong>
+                  {settings?.invoice_footer ||
+                    "Thank you for shopping with us!"}
+                </strong>
+
+                <span>
+                  Powered by NEXA POS
+                </span>
+
+              </div>
+
+            </div>
+
+            <div className="invoice-bottom-actions">
+
+              <button
+                type="button"
+                className="invoice-secondary-btn"
+                onClick={closeInvoice}
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                className="invoice-primary-btn"
+                onClick={printInvoice}
+              >
+                <Printer size={17} />
+                Print Invoice
+              </button>
+
+            </div>
 
           </div>
 

@@ -1,4 +1,20 @@
 import { useEffect, useState } from "react";
+import {
+  Settings as SettingsIcon,
+  Store,
+  Phone,
+  MapPin,
+  Receipt,
+  Percent,
+  Save,
+  ShieldCheck,
+  AlertTriangle,
+  LockKeyhole,
+  Database,
+  Trash2,
+  CheckCircle2,
+} from "lucide-react";
+
 import api from "../services/api";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
@@ -168,245 +184,396 @@ function Settings() {
   if (loading) {
     return (
       <div className="settings-page">
-        <p>Loading settings...</p>
+        <div className="settings-loading-card">
+          <div className="settings-loading-icon">
+            <SettingsIcon size={26} />
+          </div>
+
+          <div>
+            <h3>Loading Settings</h3>
+            <p>Please wait while your store settings are loaded.</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="settings-page">
-      <div className="page-header">
-        <div>
-          <h1>Settings</h1>
-          <p>
-            Manage your store information and invoice settings.
-          </p>
+      {/* =========================================
+          PAGE HEADER
+      ========================================== */}
+      <div className="settings-page-header">
+        <div className="settings-header-content">
+          <div>
+            <div className="settings-eyebrow">
+              <SettingsIcon size={14} />
+              SYSTEM CONFIGURATION
+            </div>
+
+            <h1>Settings</h1>
+
+            <p>
+              Manage your store information, invoice
+              preferences and business configuration.
+            </p>
+          </div>
+
+          <div className="settings-header-badge">
+            <ShieldCheck size={18} />
+            <span>Admin Configuration</span>
+          </div>
         </div>
       </div>
 
-      {/* ================================
-          STORE INFORMATION
-      ================================= */}
-      <div className="suppliers-card">
-        <h2>Store Information</h2>
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-
-            <div className="form-group">
-              <label>Store Name</label>
-
-              <input
-                type="text"
-                name="store_name"
-                value={form.store_name}
-                onChange={handleChange}
-                placeholder="General Store"
-              />
+      {/* =========================================
+          STORE SETTINGS
+      ========================================== */}
+      <div className="settings-workspace">
+        <div className="settings-workspace-header">
+          <div className="settings-section-title">
+            <div className="settings-section-icon blue">
+              <Store size={20} />
             </div>
 
-            <div className="form-group">
-              <label>Store Phone</label>
-
-              <input
-                type="text"
-                name="store_phone"
-                value={form.store_phone}
-                onChange={handleChange}
-                placeholder="03XXXXXXXXX"
-              />
+            <div>
+              <h2>Store Information</h2>
+              <p>
+                Configure the information displayed across
+                your POS and invoices.
+              </p>
             </div>
-
-            <div className="form-group">
-              <label>Store Address</label>
-
-              <input
-                type="text"
-                name="store_address"
-                value={form.store_address}
-                onChange={handleChange}
-                placeholder="Enter store address"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Currency</label>
-
-              <select
-                name="currency"
-                value={form.currency}
-                onChange={handleChange}
-              >
-                <option value="PKR">PKR</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Default Tax (%)</label>
-
-              <input
-                type="number"
-                name="default_tax"
-                min="0"
-                max="100"
-                step="0.01"
-                value={form.default_tax}
-                onChange={handleChange}
-                placeholder="0"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Invoice Footer</label>
-
-              <input
-                type="text"
-                name="invoice_footer"
-                value={form.invoice_footer}
-                onChange={handleChange}
-                placeholder="Thank you for shopping with us!"
-              />
-            </div>
-
           </div>
 
-          <div className="form-actions">
+          <div className="settings-status-badge">
+            <CheckCircle2 size={15} />
+            Configuration
+          </div>
+        </div>
+
+        <form
+          className="settings-form"
+          onSubmit={handleSubmit}
+        >
+          {/* STORE IDENTITY */}
+          <div className="settings-form-section">
+            <div className="settings-form-section-title">
+              <Store size={17} />
+              Store Identity
+            </div>
+
+            <div className="settings-form-grid">
+              <div className="settings-form-group">
+                <label>
+                  Store Name
+                  <span>*</span>
+                </label>
+
+                <div className="settings-input-wrapper">
+                  <Store size={17} />
+
+                  <input
+                    type="text"
+                    name="store_name"
+                    value={form.store_name}
+                    onChange={handleChange}
+                    placeholder="General Store"
+                  />
+                </div>
+              </div>
+
+              <div className="settings-form-group">
+                <label>Store Phone</label>
+
+                <div className="settings-input-wrapper">
+                  <Phone size={17} />
+
+                  <input
+                    type="text"
+                    name="store_phone"
+                    value={form.store_phone}
+                    onChange={handleChange}
+                    placeholder="03XXXXXXXXX"
+                  />
+                </div>
+              </div>
+
+              <div className="settings-form-group full-width">
+                <label>Store Address</label>
+
+                <div className="settings-input-wrapper">
+                  <MapPin size={17} />
+
+                  <input
+                    type="text"
+                    name="store_address"
+                    value={form.store_address}
+                    onChange={handleChange}
+                    placeholder="Enter store address"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* INVOICE SETTINGS */}
+          <div className="settings-form-section">
+            <div className="settings-form-section-title">
+              <Receipt size={17} />
+              Invoice & Financial Settings
+            </div>
+
+            <div className="settings-form-grid">
+              <div className="settings-form-group">
+                <label>Currency</label>
+
+                <div className="settings-input-wrapper">
+                  <span className="settings-currency-symbol">
+                    ₨
+                  </span>
+
+                  <select
+                    name="currency"
+                    value={form.currency}
+                    onChange={handleChange}
+                  >
+                    <option value="PKR">PKR</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="settings-form-group">
+                <label>Default Tax (%)</label>
+
+                <div className="settings-input-wrapper">
+                  <Percent size={17} />
+
+                  <input
+                    type="number"
+                    name="default_tax"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={form.default_tax}
+                    onChange={handleChange}
+                    placeholder="0"
+                  />
+                </div>
+
+                <small>
+                  Applied as the default tax percentage.
+                </small>
+              </div>
+
+              <div className="settings-form-group full-width">
+                <label>Invoice Footer</label>
+
+                <div className="settings-input-wrapper">
+                  <Receipt size={17} />
+
+                  <input
+                    type="text"
+                    name="invoice_footer"
+                    value={form.invoice_footer}
+                    onChange={handleChange}
+                    placeholder="Thank you for shopping with us!"
+                  />
+                </div>
+
+                <small>
+                  This message appears at the bottom of
+                  printed invoices.
+                </small>
+              </div>
+            </div>
+          </div>
+
+          {/* SAVE */}
+          <div className="settings-form-footer">
+            <div className="settings-form-note">
+              <ShieldCheck size={16} />
+
+              <span>
+                Your configuration is securely saved to the
+                business settings.
+              </span>
+            </div>
+
             <button
               type="submit"
-              className="primary-btn"
+              className="settings-save-btn"
               disabled={saving}
             >
-              {saving
-                ? "Saving..."
-                : "Save Settings"}
+              {saving ? (
+                <>
+                  <span className="settings-spinner"></span>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={17} />
+                  Save Settings
+                </>
+              )}
             </button>
           </div>
         </form>
       </div>
 
-      {/* ================================
-          BUSINESS DATA RESET
+      {/* =========================================
+          DANGER ZONE
           ADMIN ONLY
-      ================================= */}
+      ========================================== */}
       {isAdmin && (
-        <div
-          className="suppliers-card"
-          style={{
-            marginTop: "30px",
-            border: "1px solid #dc2626",
-          }}
-        >
-          <div style={{ marginBottom: "20px" }}>
-            <h2 style={{ color: "#dc2626" }}>
-              Danger Zone
-            </h2>
+        <div className="settings-danger-zone">
+          <div className="settings-danger-header">
+            <div className="settings-section-title">
+              <div className="settings-section-icon red">
+                <AlertTriangle size={20} />
+              </div>
 
-            <p style={{ marginTop: "8px" }}>
-              Reset all business data and start with a
-              fresh store database.
-            </p>
-          </div>
+              <div>
+                <div className="settings-danger-eyebrow">
+                  ADMIN ONLY
+                </div>
 
-          <div
-            style={{
-              padding: "16px",
-              marginBottom: "20px",
-              borderRadius: "8px",
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-            }}
-          >
-            <strong style={{ color: "#b91c1c" }}>
-              Warning
-            </strong>
+                <h2>Danger Zone</h2>
 
-            <p style={{ marginTop: "8px", marginBottom: 0 }}>
-              This action permanently deletes:
-            </p>
-
-            <ul style={{ marginTop: "8px" }}>
-              <li>Categories</li>
-              <li>Products</li>
-              <li>Customers</li>
-              <li>Suppliers</li>
-              <li>Invoices</li>
-              <li>Purchases</li>
-              <li>Returns</li>
-              <li>Customer & supplier ledgers</li>
-              <li>Stock movements</li>
-              <li>Expenses</li>
-              <li>Employees & salary payments</li>
-              <li>Daily closings</li>
-            </ul>
-
-            <p style={{ marginBottom: 0 }}>
-              <strong>
-                User accounts and store settings will be
-                preserved.
-              </strong>
-            </p>
-          </div>
-
-          <div className="form-grid">
-
-            <div className="form-group">
-              <label>
-                Admin Password
-              </label>
-
-              <input
-                type="password"
-                value={resetPassword}
-                onChange={(e) =>
-                  setResetPassword(e.target.value)
-                }
-                placeholder="Enter your admin password"
-                autoComplete="current-password"
-              />
+                <p>
+                  Permanently reset all business data and
+                  start with a fresh store database.
+                </p>
+              </div>
             </div>
 
-            <div className="form-group">
-              <label>
-                Confirmation
-              </label>
-
-              <input
-                type="text"
-                value={resetConfirmation}
-                onChange={(e) =>
-                  setResetConfirmation(e.target.value)
-                }
-                placeholder="RESET BUSINESS DATA"
-              />
+            <div className="settings-danger-badge">
+              <LockKeyhole size={15} />
+              Restricted
             </div>
-
           </div>
 
-          <div
-            className="form-actions"
-            style={{ marginTop: "20px" }}
-          >
-            <button
-              type="button"
-              onClick={handleBusinessReset}
-              disabled={resetting}
-              style={{
-                background: "#dc2626",
-                color: "#fff",
-                border: "none",
-                padding: "10px 18px",
-                borderRadius: "6px",
-                cursor: resetting
-                  ? "not-allowed"
-                  : "pointer",
-                fontWeight: "600",
-                opacity: resetting ? 0.7 : 1,
-              }}
-            >
-              {resetting
-                ? "Resetting..."
-                : "Reset Business Data"}
-            </button>
+          {/* WARNING */}
+          <div className="settings-danger-warning">
+            <div className="settings-danger-warning-icon">
+              <AlertTriangle size={20} />
+            </div>
+
+            <div>
+              <strong>Permanent Data Deletion</strong>
+
+              <p>
+                This operation cannot be undone. The
+                following business data will be permanently
+                deleted:
+              </p>
+
+              <div className="settings-delete-grid">
+                <span>Categories</span>
+                <span>Products</span>
+                <span>Customers</span>
+                <span>Suppliers</span>
+                <span>Invoices</span>
+                <span>Purchases</span>
+                <span>Returns</span>
+                <span>Customer & Supplier Ledgers</span>
+                <span>Stock Movements</span>
+                <span>Expenses</span>
+                <span>Employees & Salary Payments</span>
+                <span>Daily Closings</span>
+              </div>
+
+              <div className="settings-preserved-note">
+                <ShieldCheck size={16} />
+
+                <span>
+                  User accounts and store settings will be
+                  preserved.
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* RESET FORM */}
+          <div className="settings-reset-section">
+            <div className="settings-reset-heading">
+              <Database size={17} />
+              Reset Authorization
+            </div>
+
+            <div className="settings-reset-grid">
+              <div className="settings-form-group">
+                <label>Admin Password</label>
+
+                <div className="settings-input-wrapper danger-input">
+                  <LockKeyhole size={17} />
+
+                  <input
+                    type="password"
+                    value={resetPassword}
+                    onChange={(e) =>
+                      setResetPassword(e.target.value)
+                    }
+                    placeholder="Enter your admin password"
+                    autoComplete="current-password"
+                  />
+                </div>
+              </div>
+
+              <div className="settings-form-group">
+                <label>
+                  Confirmation
+                  <span>*</span>
+                </label>
+
+                <div className="settings-input-wrapper danger-input">
+                  <Trash2 size={17} />
+
+                  <input
+                    type="text"
+                    value={resetConfirmation}
+                    onChange={(e) =>
+                      setResetConfirmation(e.target.value)
+                    }
+                    placeholder="RESET BUSINESS DATA"
+                  />
+                </div>
+
+                <small>
+                  Type exactly: RESET BUSINESS DATA
+                </small>
+              </div>
+            </div>
+
+            <div className="settings-reset-footer">
+              <div className="settings-reset-note">
+                <AlertTriangle size={16} />
+
+                <span>
+                  Only perform this action when you are
+                  certain all business records should be
+                  removed.
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleBusinessReset}
+                disabled={resetting}
+                className="settings-reset-btn"
+              >
+                {resetting ? (
+                  <>
+                    <span className="settings-spinner"></span>
+                    Resetting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={17} />
+                    Reset Business Data
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

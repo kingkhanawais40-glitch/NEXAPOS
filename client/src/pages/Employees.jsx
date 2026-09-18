@@ -2,6 +2,32 @@ import { useEffect, useState } from "react";
 import api from "../services/api";
 import { useSettings } from "../context/SettingsContext";
 import { useNotification } from "../context/NotificationContext";
+import {
+  Users,
+  UserPlus,
+  UserRound,
+  Phone,
+  MapPin,
+  BriefcaseBusiness,
+  Wallet,
+  CalendarDays,
+  CreditCard,
+  Banknote,
+  ReceiptText,
+  History,
+  Pencil,
+  Trash2,
+  Search,
+  X,
+  Clock3,
+  CheckCircle2,
+  AlertCircle,
+  CircleDollarSign,
+  UserCheck,
+  UserRoundX,
+  ShieldCheck,
+  ArrowUpRight,
+} from "lucide-react";
 
 function Employees() {
   const { currency } = useSettings();
@@ -44,6 +70,15 @@ function Employees() {
     payment_method: "cash",
     notes: "",
   });
+
+  // =========================
+  // EMPLOYEE SALARY HISTORY
+  // =========================
+  const [selectedEmployeeHistory, setSelectedEmployeeHistory] =
+    useState(null);
+
+  const [employeeSalaryHistory, setEmployeeSalaryHistory] =
+    useState(null);
 
   // =========================
   // FETCH EMPLOYEES
@@ -278,9 +313,6 @@ function Employees() {
     try {
       setSalaryLoading(true);
 
-      // =========================
-      // UPDATE SALARY PAYMENT
-      // =========================
       if (editingSalaryPayment) {
         await api.put(
           `/employees/salary-payment/${editingSalaryPayment.id}`,
@@ -294,12 +326,7 @@ function Employees() {
         );
 
         showSuccess("Salary payment updated successfully");
-      }
-
-      // =========================
-      // ADD SALARY PAYMENT
-      // =========================
-      else {
+      } else {
         await api.post("/employees/salary-payment", {
           employee_id: Number(salaryForm.employee_id),
           salary_month: salaryForm.salary_month,
@@ -312,7 +339,6 @@ function Employees() {
         showSuccess("Salary payment recorded successfully");
       }
 
-      // Reset salary form
       setSalaryForm({
         employee_id: "",
         salary_month: new Date()
@@ -328,7 +354,6 @@ function Employees() {
 
       setEditingSalaryPayment(null);
 
-      // Refresh data
       fetchSalaryPayments();
       fetchSalarySummary();
       fetchSalaryStats();
@@ -342,27 +367,24 @@ function Employees() {
     }
   };
 
-  const [selectedEmployeeHistory, setSelectedEmployeeHistory] =
-  useState(null);
+  // =========================
+  // EMPLOYEE SALARY HISTORY
+  // =========================
+  const fetchEmployeeSalaryHistory = async (employee) => {
+    try {
+      const response = await api.get(
+        `/employees/${employee.id}/salary-payments`
+      );
 
-const [employeeSalaryHistory, setEmployeeSalaryHistory] =
-  useState(null);
-
-const fetchEmployeeSalaryHistory = async (employee) => {
-  try {
-    const response = await api.get(
-      `/employees/${employee.id}/salary-payments`
-    );
-
-    setSelectedEmployeeHistory(employee);
-    setEmployeeSalaryHistory(response.data.data || null);
-  } catch (error) {
-    showError(
-      error.response?.data?.message ||
-        "Failed to load employee salary history"
-    );
-  }
-};
+      setSelectedEmployeeHistory(employee);
+      setEmployeeSalaryHistory(response.data.data || null);
+    } catch (error) {
+      showError(
+        error.response?.data?.message ||
+          "Failed to load employee salary history"
+      );
+    }
+  };
 
   // =========================
   // EDIT SALARY PAYMENT
@@ -419,17 +441,6 @@ const fetchEmployeeSalaryHistory = async (employee) => {
   // =========================
   // CANCEL SALARY EDIT
   // =========================
-  const filteredEmployees = employees.filter((employee) => {
-    const term = employeeSearch.trim().toLowerCase();
-    if (!term) return true;
-    return (
-      (employee.name || "").toLowerCase().includes(term) ||
-      (employee.phone || "").toLowerCase().includes(term) ||
-      (employee.role || "").toLowerCase().includes(term) ||
-      (employee.address || "").toLowerCase().includes(term)
-    );
-  });
-
   const handleCancelSalaryEdit = () => {
     setEditingSalaryPayment(null);
 
@@ -447,32 +458,318 @@ const fetchEmployeeSalaryHistory = async (employee) => {
     });
   };
 
+  // =========================
+  // FILTER EMPLOYEES
+  // =========================
+  const filteredEmployees = employees.filter((employee) => {
+    const term = employeeSearch.trim().toLowerCase();
+
+    if (!term) return true;
+
+    return (
+      (employee.name || "")
+        .toLowerCase()
+        .includes(term) ||
+      (employee.phone || "")
+        .toLowerCase()
+        .includes(term) ||
+      (employee.role || "")
+        .toLowerCase()
+        .includes(term) ||
+      (employee.address || "")
+        .toLowerCase()
+        .includes(term)
+    );
+  });
+
+  // =========================
+  // RESET EMPLOYEE EDIT
+  // =========================
+  const handleCancelEmployeeEdit = () => {
+    setEditingEmployee(null);
+
+    setForm({
+      name: "",
+      phone: "",
+      address: "",
+      role: "cashier",
+      salary: "",
+      joining_date: "",
+      status: "active",
+    });
+  };
+
+  // =========================
+  // PAYMENT METHOD ICON
+  // =========================
+  const getPaymentIcon = (method) => {
+    switch (String(method || "").toLowerCase()) {
+      case "bank":
+        return <CreditCard size={15} />;
+
+      case "easypaisa":
+      case "jazzcash":
+        return <Wallet size={15} />;
+
+      default:
+        return <Banknote size={15} />;
+    }
+  };
+
+  // =========================
+  // PAYMENT STATUS CLASS
+  // =========================
+  const getSalaryStatusClass = (status) => {
+    return String(status || "")
+      .toLowerCase()
+      .replace(/\s+/g, "-");
+  };
+
   return (
     <div className="employees-page">
-      <div className="page-header">
-        <div>
-          <h1>Employees</h1>
-          <p>
-            Manage employees and salary payments.
-          </p>
+
+      {/* =========================
+          PAGE HEADER
+      ========================= */}
+      <div className="employees-page-header">
+        <div className="employees-header-content">
+          <div>
+            <div className="employees-eyebrow">
+              <Users size={15} />
+              HR & Payroll Management
+            </div>
+
+            <h1>Employees</h1>
+
+            <p>
+              Manage your team, salaries and employee
+              payment records from one workspace.
+            </p>
+          </div>
+
+          <div className="employees-header-badge">
+            <ShieldCheck size={18} />
+            Admin Workspace
+          </div>
         </div>
       </div>
 
       {/* =========================
+          KPI CARDS
+      ========================= */}
+      {salaryStats && (
+        <div className="employees-kpi-grid">
+
+          <div className="employees-kpi-card blue">
+            <div className="employees-kpi-top">
+              <div className="employees-kpi-icon">
+                <Users size={20} />
+              </div>
+
+              <span className="employees-kpi-label">
+                Workforce
+              </span>
+            </div>
+
+            <strong>
+              {salaryStats.total_employees || 0}
+            </strong>
+
+            <span className="employees-kpi-footer">
+              Total employees
+            </span>
+          </div>
+
+          <div className="employees-kpi-card green">
+            <div className="employees-kpi-top">
+              <div className="employees-kpi-icon">
+                <UserCheck size={20} />
+              </div>
+
+              <span className="employees-kpi-label">
+                Active Staff
+              </span>
+            </div>
+
+            <strong>
+              {salaryStats.active_employees || 0}
+            </strong>
+
+            <span className="employees-kpi-footer">
+              Currently active
+            </span>
+          </div>
+
+          <div className="employees-kpi-card purple">
+            <div className="employees-kpi-top">
+              <div className="employees-kpi-icon">
+                <CircleDollarSign size={20} />
+              </div>
+
+              <span className="employees-kpi-label">
+                Monthly Payroll
+              </span>
+            </div>
+
+            <strong>
+              {currency}{" "}
+              {salaryStats.total_monthly_salary || 0}
+            </strong>
+
+            <span className="employees-kpi-footer">
+              Total monthly salary
+            </span>
+          </div>
+
+          <div className="employees-kpi-card blue">
+            <div className="employees-kpi-top">
+              <div className="employees-kpi-icon">
+                <Wallet size={20} />
+              </div>
+
+              <span className="employees-kpi-label">
+                Paid This Month
+              </span>
+            </div>
+
+            <strong>
+              {currency}{" "}
+              {salaryStats.total_paid_this_month || 0}
+            </strong>
+
+            <span className="employees-kpi-footer">
+              Salary already paid
+            </span>
+          </div>
+
+          <div className="employees-kpi-card amber">
+            <div className="employees-kpi-top">
+              <div className="employees-kpi-icon">
+                <Clock3 size={20} />
+              </div>
+
+              <span className="employees-kpi-label">
+                Remaining Salary
+              </span>
+            </div>
+
+            <strong>
+              {currency}{" "}
+              {salaryStats.total_remaining_salary || 0}
+            </strong>
+
+            <span className="employees-kpi-footer">
+              Pending this month
+            </span>
+          </div>
+
+          <div className="employees-kpi-card green">
+            <div className="employees-kpi-top">
+              <div className="employees-kpi-icon">
+                <CheckCircle2 size={20} />
+              </div>
+
+              <span className="employees-kpi-label">
+                Fully Paid
+              </span>
+            </div>
+
+            <strong>
+              {salaryStats.paid_employees || 0}
+            </strong>
+
+            <span className="employees-kpi-footer">
+              Employees fully paid
+            </span>
+          </div>
+
+          <div className="employees-kpi-card amber">
+            <div className="employees-kpi-top">
+              <div className="employees-kpi-icon">
+                <AlertCircle size={20} />
+              </div>
+
+              <span className="employees-kpi-label">
+                Partial Paid
+              </span>
+            </div>
+
+            <strong>
+              {salaryStats.partial_paid_employees || 0}
+            </strong>
+
+            <span className="employees-kpi-footer">
+              Partially paid
+            </span>
+          </div>
+
+          <div className="employees-kpi-card red">
+            <div className="employees-kpi-top">
+              <div className="employees-kpi-icon">
+                <UserRoundX size={20} />
+              </div>
+
+              <span className="employees-kpi-label">
+                Unpaid
+              </span>
+            </div>
+
+            <strong>
+              {salaryStats.unpaid_employees || 0}
+            </strong>
+
+            <span className="employees-kpi-footer">
+              Salary not recorded
+            </span>
+          </div>
+
+        </div>
+      )}
+
+      {/* =========================
           EMPLOYEE FORM
       ========================= */}
-      <div className="suppliers-card">
-        <h2>
-          {editingEmployee
-            ? "Edit Employee"
-            : "Add Employee"}
-        </h2>
+      <div className="employee-workspace">
+
+        <div className="employee-workspace-header">
+          <div className="employee-section-heading">
+            <div className="employee-section-icon blue">
+              {editingEmployee ? (
+                <Pencil size={18} />
+              ) : (
+                <UserPlus size={18} />
+              )}
+            </div>
+
+            <div>
+              <h2>
+                {editingEmployee
+                  ? "Edit Employee"
+                  : "Add Employee"}
+              </h2>
+
+              <p>
+                {editingEmployee
+                  ? "Update employee information and payroll details."
+                  : "Create a new employee profile for your business."}
+              </p>
+            </div>
+          </div>
+
+          <span className="employee-status-badge">
+            <BriefcaseBusiness size={14} />
+            Employee Profile
+          </span>
+        </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="form-grid">
+          <div className="employee-form-grid">
 
-            <div className="form-group">
-              <label>Name</label>
+            <div className="employee-form-group">
+              <label>
+                <UserRound size={14} />
+                Name
+              </label>
 
               <input
                 type="text"
@@ -483,8 +780,11 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               />
             </div>
 
-            <div className="form-group">
-              <label>Phone</label>
+            <div className="employee-form-group">
+              <label>
+                <Phone size={14} />
+                Phone
+              </label>
 
               <input
                 type="text"
@@ -495,8 +795,11 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               />
             </div>
 
-            <div className="form-group">
-              <label>Address</label>
+            <div className="employee-form-group employee-form-wide">
+              <label>
+                <MapPin size={14} />
+                Address
+              </label>
 
               <input
                 type="text"
@@ -507,30 +810,28 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               />
             </div>
 
-            <div className="form-group">
-              <label>Role</label>
+            <div className="employee-form-group">
+              <label>
+                <BriefcaseBusiness size={14} />
+                Role
+              </label>
 
               <select
                 name="role"
                 value={form.role}
                 onChange={handleChange}
               >
-                <option value="cashier">
-                  Cashier
-                </option>
-
-                <option value="manager">
-                  Manager
-                </option>
-
-                <option value="staff">
-                  Staff
-                </option>
+                <option value="cashier">Cashier</option>
+                <option value="manager">Manager</option>
+                <option value="staff">Staff</option>
               </select>
             </div>
 
-            <div className="form-group">
-              <label>Salary</label>
+            <div className="employee-form-group">
+              <label>
+                <CircleDollarSign size={14} />
+                Salary
+              </label>
 
               <input
                 type="number"
@@ -542,8 +843,11 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               />
             </div>
 
-            <div className="form-group">
-              <label>Joining Date</label>
+            <div className="employee-form-group">
+              <label>
+                <CalendarDays size={14} />
+                Joining Date
+              </label>
 
               <input
                 type="date"
@@ -553,158 +857,109 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               />
             </div>
 
-            <div className="form-group">
-              <label>Status</label>
+            <div className="employee-form-group">
+              <label>
+                <CheckCircle2 size={14} />
+                Status
+              </label>
 
               <select
                 name="status"
                 value={form.status}
                 onChange={handleChange}
               >
-                <option value="active">
-                  Active
-                </option>
-
-                <option value="inactive">
-                  Inactive
-                </option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
               </select>
             </div>
 
           </div>
 
-          <div className="form-actions">
+          <div className="employee-form-footer">
+            <div className="employee-form-note">
+              <ShieldCheck size={15} />
+              Employee information is saved securely.
+            </div>
 
-            <button
-              type="submit"
-              className="primary-btn"
-            >
-              {editingEmployee
-                ? "Update Employee"
-                : "Add Employee"}
-            </button>
+            <div className="employee-form-actions">
+              {editingEmployee && (
+                <button
+                  type="button"
+                  className="employee-secondary-btn"
+                  onClick={handleCancelEmployeeEdit}
+                >
+                  <X size={16} />
+                  Cancel
+                </button>
+              )}
 
-            {editingEmployee && (
               <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => {
-                  setEditingEmployee(null);
-
-                  setForm({
-                    name: "",
-                    phone: "",
-                    address: "",
-                    role: "cashier",
-                    salary: "",
-                    joining_date: "",
-                    status: "active",
-                  });
-                }}
+                type="submit"
+                className="employee-primary-btn"
               >
-                Cancel
+                {editingEmployee ? (
+                  <>
+                    <Pencil size={16} />
+                    Update Employee
+                  </>
+                ) : (
+                  <>
+                    <UserPlus size={16} />
+                    Add Employee
+                  </>
+                )}
               </button>
-            )}
-
+            </div>
           </div>
         </form>
       </div>
 
       {/* =========================
-          SALARY STATS
-      ========================= */}
-      {salaryStats && (
-        <div className="reports-grid">
-
-          <div className="dashboard-card">
-            <h3>Total Employees</h3>
-            <strong>
-              {salaryStats.total_employees}
-            </strong>
-          </div>
-
-          <div className="dashboard-card">
-            <h3>Active Employees</h3>
-            <strong>
-              {salaryStats.active_employees}
-            </strong>
-          </div>
-
-          <div className="dashboard-card">
-            <h3>Monthly Salary</h3>
-            <strong>
-              {currency} {salaryStats.total_monthly_salary}
-            </strong>
-          </div>
-
-          <div className="dashboard-card">
-            <h3>Paid This Month</h3>
-            <strong>
-              {currency} {salaryStats.total_paid_this_month}
-            </strong>
-          </div>
-
-          <div className="dashboard-card">
-            <h3>Remaining Salary</h3>
-            <strong>
-              {currency} {salaryStats.total_remaining_salary}
-            </strong>
-          </div>
-
-          <div className="dashboard-card">
-            <h3>Paid Employees</h3>
-            <strong>
-              {salaryStats.paid_employees}
-            </strong>
-          </div>
-
-          <div className="dashboard-card">
-            <h3>Partial Paid</h3>
-            <strong>
-              {salaryStats.partial_paid_employees}
-            </strong>
-          </div>
-
-          <div className="dashboard-card">
-            <h3>Unpaid Employees</h3>
-            <strong>
-              {salaryStats.unpaid_employees}
-            </strong>
-          </div>
-
-        </div>
-      )}
-
-      {/* =========================
           SALARY PAYMENT FORM
       ========================= */}
-      <div className="suppliers-card">
-        <h2>
-          {editingSalaryPayment
-            ? "Edit Salary Payment"
-            : "Record Salary Payment"}
-        </h2>
+      <div className="employee-workspace salary-workspace">
 
-        {editingSalaryPayment && (
-          <p>
-            Editing payment #{editingSalaryPayment.id}
-            {" "}— {editingSalaryPayment.employee_name}
-          </p>
-        )}
+        <div className="employee-workspace-header">
+          <div className="employee-section-heading">
+            <div className="employee-section-icon green">
+              <Wallet size={18} />
+            </div>
+
+            <div>
+              <h2>
+                {editingSalaryPayment
+                  ? "Edit Salary Payment"
+                  : "Record Salary Payment"}
+              </h2>
+
+              <p>
+                {editingSalaryPayment
+                  ? `Editing payment #${editingSalaryPayment.id} — ${editingSalaryPayment.employee_name}`
+                  : "Record employee salary payments and maintain payroll history."}
+              </p>
+            </div>
+          </div>
+
+          <span className="employee-status-badge green">
+            <ReceiptText size={14} />
+            Payroll
+          </span>
+        </div>
 
         <form onSubmit={handleSalarySubmit}>
-          <div className="form-grid">
+          <div className="employee-form-grid">
 
-            <div className="form-group">
-              <label>Employee</label>
+            <div className="employee-form-group">
+              <label>
+                <UserRound size={14} />
+                Employee
+              </label>
 
               <select
                 name="employee_id"
                 value={salaryForm.employee_id}
                 onChange={handleSalaryChange}
-                disabled={Boolean(
-                  editingSalaryPayment
-                )}
+                disabled={Boolean(editingSalaryPayment)}
               >
                 <option value="">
                   Select Employee
@@ -721,8 +976,11 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               </select>
             </div>
 
-            <div className="form-group">
-              <label>Salary Month</label>
+            <div className="employee-form-group">
+              <label>
+                <CalendarDays size={14} />
+                Salary Month
+              </label>
 
               <input
                 type="month"
@@ -732,8 +990,11 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               />
             </div>
 
-            <div className="form-group">
-              <label>Amount</label>
+            <div className="employee-form-group">
+              <label>
+                <CircleDollarSign size={14} />
+                Amount
+              </label>
 
               <input
                 type="number"
@@ -745,8 +1006,11 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               />
             </div>
 
-            <div className="form-group">
-              <label>Payment Date</label>
+            <div className="employee-form-group">
+              <label>
+                <CalendarDays size={14} />
+                Payment Date
+              </label>
 
               <input
                 type="date"
@@ -756,34 +1020,29 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               />
             </div>
 
-            <div className="form-group">
-              <label>Payment Method</label>
+            <div className="employee-form-group">
+              <label>
+                <CreditCard size={14} />
+                Payment Method
+              </label>
 
               <select
                 name="payment_method"
                 value={salaryForm.payment_method}
                 onChange={handleSalaryChange}
               >
-                <option value="cash">
-                  Cash
-                </option>
-
-                <option value="bank">
-                  Bank
-                </option>
-
-                <option value="easypaisa">
-                  Easypaisa
-                </option>
-
-                <option value="jazzcash">
-                  JazzCash
-                </option>
+                <option value="cash">Cash</option>
+                <option value="bank">Bank</option>
+                <option value="easypaisa">Easypaisa</option>
+                <option value="jazzcash">JazzCash</option>
               </select>
             </div>
 
-            <div className="form-group">
-              <label>Notes</label>
+            <div className="employee-form-group employee-form-wide">
+              <label>
+                <ReceiptText size={14} />
+                Notes
+              </label>
 
               <input
                 type="text"
@@ -796,31 +1055,48 @@ const fetchEmployeeSalaryHistory = async (employee) => {
 
           </div>
 
-          <div className="form-actions">
+          <div className="employee-form-footer">
+            <div className="employee-form-note">
+              <Wallet size={15} />
+              Salary payment will be added to payroll records.
+            </div>
 
-            <button
-              type="submit"
-              className="primary-btn"
-              disabled={salaryLoading}
-            >
-              {salaryLoading
-                ? "Processing..."
-                : editingSalaryPayment
-                ? "Update Salary Payment"
-                : "Record Salary Payment"}
-            </button>
+            <div className="employee-form-actions">
+              {editingSalaryPayment && (
+                <button
+                  type="button"
+                  className="employee-secondary-btn"
+                  onClick={handleCancelSalaryEdit}
+                  disabled={salaryLoading}
+                >
+                  <X size={16} />
+                  Cancel
+                </button>
+              )}
 
-            {editingSalaryPayment && (
               <button
-                type="button"
-                className="secondary-btn"
-                onClick={handleCancelSalaryEdit}
+                type="submit"
+                className="employee-primary-btn green"
                 disabled={salaryLoading}
               >
-                Cancel
+                {salaryLoading ? (
+                  <>
+                    <span className="employee-spinner" />
+                    Processing...
+                  </>
+                ) : editingSalaryPayment ? (
+                  <>
+                    <Pencil size={16} />
+                    Update Payment
+                  </>
+                ) : (
+                  <>
+                    <Wallet size={16} />
+                    Record Payment
+                  </>
+                )}
               </button>
-            )}
-
+            </div>
           </div>
         </form>
       </div>
@@ -828,16 +1104,45 @@ const fetchEmployeeSalaryHistory = async (employee) => {
       {/* =========================
           SALARY SUMMARY
       ========================= */}
-      <div className="suppliers-card">
-        <h2>Salary Summary</h2>
+      <div className="employee-table-card">
+
+        <div className="employee-table-header">
+          <div>
+            <div className="employee-table-title">
+              <div className="employee-section-icon purple">
+                <CircleDollarSign size={18} />
+              </div>
+
+              <div>
+                <h2>Salary Summary</h2>
+                <p>
+                  Current monthly payroll status by employee.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <span className="employee-count-badge">
+            {salarySummary.length} Employees
+          </span>
+        </div>
 
         {salarySummary.length === 0 ? (
-          <p>
-            No salary summary available.
-          </p>
+          <div className="employee-empty-state">
+            <div className="employee-empty-icon">
+              <ReceiptText size={25} />
+            </div>
+
+            <h3>No salary summary available</h3>
+
+            <p>
+              Salary information will appear here once
+              employees are available.
+            </p>
+          </div>
         ) : (
-          <div className="table-wrapper">
-            <table>
+          <div className="employee-table-wrapper">
+            <table className="employee-table">
               <thead>
                 <tr>
                   <th>Employee</th>
@@ -852,31 +1157,64 @@ const fetchEmployeeSalaryHistory = async (employee) => {
               <tbody>
                 {salarySummary.map((employee) => (
                   <tr key={employee.id}>
-                    <td>{employee.name}</td>
-
-                    <td>{employee.role}</td>
-
                     <td>
-                      {currency} {employee.salary}
+                      <div className="employee-name-cell">
+                        <div className="employee-avatar">
+                          <UserRound size={17} />
+                        </div>
+
+                        <div>
+                          <strong>{employee.name}</strong>
+                          <span>
+                            Employee #{employee.id}
+                          </span>
+                        </div>
+                      </div>
                     </td>
 
                     <td>
-                      {currency} {employee.paid_this_month}
+                      <span className="employee-role-badge">
+                        {employee.role}
+                      </span>
                     </td>
 
                     <td>
-                      {currency} {employee.remaining_salary}
+                      <span className="employee-money">
+                        {currency} {employee.salary}
+                      </span>
                     </td>
 
                     <td>
-  <span
-    className={`salary-status ${String(
-      employee.payment_status || ""
-    ).toLowerCase()}`}
-  >
-    {employee.payment_status}
-  </span>
-</td>
+                      <span className="employee-money paid">
+                        {currency}{" "}
+                        {employee.paid_this_month}
+                      </span>
+                    </td>
+
+                    <td>
+                      <span
+                        className={`employee-money ${
+                          Number(employee.remaining_salary) > 0
+                            ? "remaining"
+                            : "cleared"
+                        }`}
+                      >
+                        {currency}{" "}
+                        {employee.remaining_salary}
+                      </span>
+                    </td>
+
+                    <td>
+                      <span
+                        className={`salary-status ${getSalaryStatusClass(
+                          employee.payment_status
+                        )}`}
+                      >
+                        {String(
+                          employee.payment_status || "-"
+                        )}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -885,89 +1223,208 @@ const fetchEmployeeSalaryHistory = async (employee) => {
         )}
       </div>
 
-      {selectedEmployeeHistory && employeeSalaryHistory && (
-  <div className="suppliers-card">
-    <h2>
-      Salary History — {selectedEmployeeHistory.name}
-    </h2>
+      {/* =========================
+          EMPLOYEE SALARY HISTORY
+      ========================= */}
+      {selectedEmployeeHistory &&
+        employeeSalaryHistory && (
+          <div className="employee-history-detail-card">
 
-    <p>
-      Role: {employeeSalaryHistory.employee?.role ||
-        selectedEmployeeHistory.role}
-    </p>
+            <div className="employee-history-detail-header">
+              <div className="employee-table-title">
+                <div className="employee-section-icon blue">
+                  <History size={18} />
+                </div>
 
-    <div className="reports-grid">
-      <div className="dashboard-card">
-        <h3>Total Payments</h3>
-        <strong>
-          {employeeSalaryHistory.total_payments || 0}
-        </strong>
-      </div>
+                <div>
+                  <h2>
+                    Salary History —{" "}
+                    {selectedEmployeeHistory.name}
+                  </h2>
 
-      <div className="dashboard-card">
-        <h3>Total Paid</h3>
-        <strong>
-          {currency} {employeeSalaryHistory.total_paid || 0}
-        </strong>
-      </div>
-    </div>
+                  <p>
+                    Role:{" "}
+                    {employeeSalaryHistory.employee?.role ||
+                      selectedEmployeeHistory.role}
+                  </p>
+                </div>
+              </div>
 
-    {employeeSalaryHistory.payments?.length === 0 ? (
-      <p>No salary payments found.</p>
-    ) : (
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>Salary Month</th>
-              <th>Amount</th>
-              <th>Payment Date</th>
-              <th>Payment Method</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
+              <button
+                type="button"
+                className="employee-close-history"
+                onClick={() => {
+                  setSelectedEmployeeHistory(null);
+                  setEmployeeSalaryHistory(null);
+                }}
+              >
+                <X size={17} />
+              </button>
+            </div>
 
-          <tbody>
-            {employeeSalaryHistory.payments.map((payment) => (
-              <tr key={payment.id}>
-                <td>{payment.salary_month}</td>
-                <td>{currency} {payment.amount}</td>
-                <td>{payment.payment_date}</td>
-                <td>{payment.payment_method}</td>
-                <td>{payment.notes || "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
+            <div className="employee-history-stats">
+              <div className="employee-history-stat">
+                <div className="employee-history-stat-icon blue">
+                  <ReceiptText size={18} />
+                </div>
 
-    <button
-      type="button"
-      className="secondary-btn"
-      onClick={() => {
-        setSelectedEmployeeHistory(null);
-        setEmployeeSalaryHistory(null);
-      }}
-    >
-      Close History
-    </button>
-  </div>
-)}
+                <div>
+                  <span>Total Payments</span>
+                  <strong>
+                    {employeeSalaryHistory.total_payments ||
+                      0}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="employee-history-stat">
+                <div className="employee-history-stat-icon green">
+                  <CircleDollarSign size={18} />
+                </div>
+
+                <div>
+                  <span>Total Paid</span>
+                  <strong>
+                    {currency}{" "}
+                    {employeeSalaryHistory.total_paid ||
+                      0}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {employeeSalaryHistory.payments?.length === 0 ? (
+              <div className="employee-empty-state compact">
+                <div className="employee-empty-icon">
+                  <History size={24} />
+                </div>
+
+                <h3>No salary payments found</h3>
+
+                <p>
+                  This employee does not have any salary
+                  payment records yet.
+                </p>
+              </div>
+            ) : (
+              <div className="employee-table-wrapper">
+                <table className="employee-table">
+                  <thead>
+                    <tr>
+                      <th>Salary Month</th>
+                      <th>Amount</th>
+                      <th>Payment Date</th>
+                      <th>Payment Method</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {employeeSalaryHistory.payments.map(
+                      (payment) => (
+                        <tr key={payment.id}>
+                          <td>
+                            <span className="employee-month">
+                              <CalendarDays size={14} />
+                              {payment.salary_month}
+                            </span>
+                          </td>
+
+                          <td>
+                            <span className="employee-money paid">
+                              {currency} {payment.amount}
+                            </span>
+                          </td>
+
+                          <td>
+                            <span className="employee-date">
+                              {payment.payment_date}
+                            </span>
+                          </td>
+
+                          <td>
+                            <span
+                              className={`employee-payment-badge ${String(
+                                payment.payment_method ||
+                                  "cash"
+                              ).toLowerCase()}`}
+                            >
+                              {getPaymentIcon(
+                                payment.payment_method
+                              )}
+
+                              {payment.payment_method}
+                            </span>
+                          </td>
+
+                          <td>
+                            <span className="employee-notes">
+                              {payment.notes || "-"}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="employee-history-footer">
+              <button
+                type="button"
+                className="employee-secondary-btn"
+                onClick={() => {
+                  setSelectedEmployeeHistory(null);
+                  setEmployeeSalaryHistory(null);
+                }}
+              >
+                <X size={16} />
+                Close History
+              </button>
+            </div>
+          </div>
+        )}
 
       {/* =========================
           SALARY PAYMENT HISTORY
       ========================= */}
-      <div className="suppliers-card">
-        <h2>Salary Payment History</h2>
+      <div className="employee-table-card">
+
+        <div className="employee-table-header">
+          <div className="employee-table-title">
+            <div className="employee-section-icon green">
+              <ReceiptText size={18} />
+            </div>
+
+            <div>
+              <h2>Salary Payment History</h2>
+              <p>
+                Complete record of employee salary payments.
+              </p>
+            </div>
+          </div>
+
+          <span className="employee-count-badge">
+            {salaryPayments.length} Payments
+          </span>
+        </div>
 
         {salaryPayments.length === 0 ? (
-          <p>
-            No salary payments found.
-          </p>
+          <div className="employee-empty-state">
+            <div className="employee-empty-icon">
+              <ReceiptText size={25} />
+            </div>
+
+            <h3>No salary payments found</h3>
+
+            <p>
+              Recorded salary payments will appear here.
+            </p>
+          </div>
         ) : (
-          <div className="table-wrapper">
-            <table>
+          <div className="employee-table-wrapper">
+            <table className="employee-table">
               <thead>
                 <tr>
                   <th>Employee</th>
@@ -986,63 +1443,95 @@ const fetchEmployeeSalaryHistory = async (employee) => {
                   <tr key={payment.id}>
 
                     <td>
-                      {payment.employee_name}
+                      <div className="employee-name-cell">
+                        <div className="employee-avatar">
+                          <UserRound size={17} />
+                        </div>
+
+                        <div>
+                          <strong>
+                            {payment.employee_name}
+                          </strong>
+
+                          <span>
+                            Payment #{payment.id}
+                          </span>
+                        </div>
+                      </div>
                     </td>
 
                     <td>
-                      {payment.role}
+                      <span className="employee-role-badge">
+                        {payment.role}
+                      </span>
                     </td>
 
                     <td>
-                      {payment.salary_month}
+                      <span className="employee-month">
+                        <CalendarDays size={14} />
+                        {payment.salary_month}
+                      </span>
                     </td>
 
                     <td>
-                      {currency} {payment.amount}
+                      <span className="employee-money paid">
+                        {currency} {payment.amount}
+                      </span>
                     </td>
 
                     <td>
-                      {payment.payment_date}
+                      <span className="employee-date">
+                        {payment.payment_date}
+                      </span>
                     </td>
 
                     <td>
-                      {payment.payment_method}
-                    </td>
-
-                    <td>
-                      {payment.notes || "-"}
-                    </td>
-
-                    <td>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "8px",
-                          alignItems: "center",
-                        }}
+                      <span
+                        className={`employee-payment-badge ${String(
+                          payment.payment_method ||
+                            "cash"
+                        ).toLowerCase()}`}
                       >
+                        {getPaymentIcon(
+                          payment.payment_method
+                        )}
+
+                        {payment.payment_method}
+                      </span>
+                    </td>
+
+                    <td>
+                      <span className="employee-notes">
+                        {payment.notes || "-"}
+                      </span>
+                    </td>
+
+                    <td>
+                      <div className="employee-actions">
                         <button
                           type="button"
-                          className="secondary-btn"
+                          className="employee-action-btn edit"
                           onClick={() =>
                             handleEditSalaryPayment(
                               payment
                             )
                           }
+                          title="Edit payment"
                         >
-                          Edit
+                          <Pencil size={15} />
                         </button>
 
                         <button
                           type="button"
-                          className="danger-btn"
+                          className="employee-action-btn delete"
                           onClick={() =>
                             handleDeleteSalaryPayment(
                               payment
                             )
                           }
+                          title="Delete payment"
                         >
-                          Delete
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </td>
@@ -1058,34 +1547,92 @@ const fetchEmployeeSalaryHistory = async (employee) => {
       {/* =========================
           EMPLOYEE LIST
       ========================= */}
-      <div className="suppliers-card">
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "10px",
-          }}
-        >
-          <h2>Employee List</h2>
+      <div className="employee-table-card">
 
-          <input
-            type="text"
-            placeholder="Search by name, phone, role, address..."
-            value={employeeSearch}
-            onChange={(e) => setEmployeeSearch(e.target.value)}
-            style={{ maxWidth: "280px" }}
-          />
+        <div className="employee-table-header employee-list-header">
+
+          <div className="employee-table-title">
+            <div className="employee-section-icon blue">
+              <Users size={18} />
+            </div>
+
+            <div>
+              <h2>Employee List</h2>
+              <p>
+                Manage employee profiles, roles and payroll.
+              </p>
+            </div>
+          </div>
+
+          <div className="employee-list-toolbar">
+
+            <div className="employee-search">
+              <Search size={17} />
+
+              <input
+                type="text"
+                placeholder="Search name, phone, role..."
+                value={employeeSearch}
+                onChange={(e) =>
+                  setEmployeeSearch(e.target.value)
+                }
+              />
+
+              {employeeSearch && (
+                <button
+                  type="button"
+                  onClick={() => setEmployeeSearch("")}
+                  title="Clear search"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+
+            <span className="employee-count-badge">
+              {filteredEmployees.length} of{" "}
+              {employees.length}
+            </span>
+          </div>
         </div>
 
         {employees.length === 0 ? (
-          <p>No employees found.</p>
+          <div className="employee-empty-state">
+            <div className="employee-empty-icon">
+              <Users size={25} />
+            </div>
+
+            <h3>No employees found</h3>
+
+            <p>
+              Add your first employee to start managing
+              payroll.
+            </p>
+          </div>
         ) : filteredEmployees.length === 0 ? (
-          <p>No employees match your search.</p>
+          <div className="employee-empty-state">
+            <div className="employee-empty-icon">
+              <Search size={25} />
+            </div>
+
+            <h3>No matching employees</h3>
+
+            <p>
+              Try searching with another name, phone or role.
+            </p>
+
+            <button
+              type="button"
+              className="employee-secondary-btn"
+              onClick={() => setEmployeeSearch("")}
+            >
+              <X size={16} />
+              Clear Search
+            </button>
+          </div>
         ) : (
-          <div className="table-wrapper">
-            <table>
+          <div className="employee-table-wrapper">
+            <table className="employee-table">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -1103,68 +1650,99 @@ const fetchEmployeeSalaryHistory = async (employee) => {
                   <tr key={employee.id}>
 
                     <td>
-                      {employee.name}
+                      <div className="employee-name-cell">
+                        <div className="employee-avatar">
+                          <UserRound size={17} />
+                        </div>
+
+                        <div>
+                          <strong>{employee.name}</strong>
+
+                          <span>
+                            {employee.address || "No address"}
+                          </span>
+                        </div>
+                      </div>
                     </td>
 
                     <td>
-                      {employee.phone || "-"}
+                      <span className="employee-contact">
+                        <Phone size={14} />
+                        {employee.phone || "-"}
+                      </span>
                     </td>
 
                     <td>
-                      {employee.role}
+                      <span className="employee-role-badge">
+                        {employee.role}
+                      </span>
                     </td>
 
                     <td>
-                      {currency} {employee.salary}
+                      <span className="employee-money">
+                        {currency} {employee.salary}
+                      </span>
                     </td>
 
                     <td>
-                      {employee.joining_date || "-"}
+                      <span className="employee-date">
+                        <CalendarDays size={14} />
+                        {employee.joining_date || "-"}
+                      </span>
                     </td>
 
                     <td>
-                      {employee.status}
+                      <span
+                        className={`employee-status-pill ${String(
+                          employee.status || ""
+                        ).toLowerCase()}`}
+                      >
+                        <span className="employee-status-dot" />
+                        {employee.status}
+                      </span>
                     </td>
 
                     <td>
-  <div
-    style={{
-      display: "flex",
-      gap: "8px",
-      flexWrap: "wrap",
-    }}
-  >
-    <button
-      type="button"
-      className="secondary-btn"
-      onClick={() =>
-        handleEditEmployee(employee)
-      }
-    >
-      Edit
-    </button>
+                      <div className="employee-actions">
 
-    <button
-      type="button"
-      className="secondary-btn"
-      onClick={() =>
-  fetchEmployeeSalaryHistory(employee)
-}
-    >
-      Salary History
-    </button>
+                        <button
+                          type="button"
+                          className="employee-action-btn edit"
+                          onClick={() =>
+                            handleEditEmployee(employee)
+                          }
+                          title="Edit employee"
+                        >
+                          <Pencil size={15} />
+                        </button>
 
-    <button
-      type="button"
-      className="danger-btn"
-      onClick={() =>
-        handleDeleteEmployee(employee)
-      }
-    >
-      Delete
-    </button>
-  </div>
-</td>
+                        <button
+                          type="button"
+                          className="employee-history-btn"
+                          onClick={() =>
+                            fetchEmployeeSalaryHistory(
+                              employee
+                            )
+                          }
+                        >
+                          <History size={15} />
+                          History
+                          <ArrowUpRight size={13} />
+                        </button>
+
+                        <button
+                          type="button"
+                          className="employee-action-btn delete"
+                          onClick={() =>
+                            handleDeleteEmployee(employee)
+                          }
+                          title="Delete employee"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+
+                      </div>
+                    </td>
 
                   </tr>
                 ))}
@@ -1173,6 +1751,7 @@ const fetchEmployeeSalaryHistory = async (employee) => {
           </div>
         )}
       </div>
+
     </div>
   );
 }

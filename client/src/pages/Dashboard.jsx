@@ -12,6 +12,7 @@ import {
   UserPlus,
   ShoppingBag,
   BarChart3,
+  ArrowUpRight,
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
@@ -29,9 +30,7 @@ function Dashboard() {
   const [salesChart, setSalesChart] = useState([]);
   const [expenseChart, setExpenseChart] = useState([]);
 
-  const [currentDateTime, setCurrentDateTime] = useState(
-    new Date()
-  );
+  const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
   /* =====================================================
      LIVE DATE & TIME
@@ -52,10 +51,7 @@ function Dashboard() {
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        const response = await api.get(
-          "/dashboard/summary"
-        );
-
+        const response = await api.get("/dashboard/summary");
         setSummary(response.data.data);
       } catch (error) {
         console.error(
@@ -67,13 +63,9 @@ function Dashboard() {
 
     const fetchSalesChart = async () => {
       try {
-        const response = await api.get(
-          "/reports/sales-chart"
-        );
+        const response = await api.get("/reports/sales-chart");
 
-        setSalesChart(
-          response.data.data || []
-        );
+        setSalesChart(response.data.data || []);
       } catch (error) {
         console.error(
           error.response?.data?.message ||
@@ -83,24 +75,15 @@ function Dashboard() {
     };
 
     const fetchExpenseChart = async () => {
-      /*
-        Expense report is admin-only.
-        Cashiers should not request this endpoint.
-      */
-
       if (!isAdmin) {
         setExpenseChart([]);
         return;
       }
 
       try {
-        const response = await api.get(
-          "/reports/expense-chart"
-        );
+        const response = await api.get("/reports/expense-chart");
 
-        setExpenseChart(
-          response.data.data || []
-        );
+        setExpenseChart(response.data.data || []);
       } catch (error) {
         console.error(
           error.response?.data?.message ||
@@ -121,13 +104,10 @@ function Dashboard() {
   if (!summary) {
     return (
       <div className="dashboard">
-        <div className="dashboard-header">
-          <div>
-            <h1>Loading Dashboard</h1>
-            <p>
-              Preparing your store overview...
-            </p>
-          </div>
+        <div className="dashboard-loading">
+          <div className="dashboard-loading-spinner" />
+          <h2>Loading Dashboard</h2>
+          <p>Preparing your store overview...</p>
         </div>
       </div>
     );
@@ -146,8 +126,7 @@ function Dashboard() {
 
   const maxExpenses = Math.max(
     ...expenseChart.map(
-      (item) =>
-        Number(item.total_expenses) || 0
+      (item) => Number(item.total_expenses) || 0
     ),
     1
   );
@@ -163,7 +142,6 @@ function Dashboard() {
       icon: ShoppingCart,
       color: "sales",
     },
-
     {
       title: "Today Invoices",
       value: Number(
@@ -172,14 +150,12 @@ function Dashboard() {
       icon: FileText,
       color: "invoices",
     },
-
     {
       title: "Month Sales",
       value: formatCurrency(summary.month_sales),
       icon: ShoppingCart,
       color: "month-sales",
     },
-
     {
       title: "Total Products",
       value: Number(
@@ -188,7 +164,6 @@ function Dashboard() {
       icon: Package,
       color: "products",
     },
-
     {
       title: "Low Stock",
       value: Number(
@@ -197,21 +172,18 @@ function Dashboard() {
       icon: AlertTriangle,
       color: "low-stock",
     },
-
     {
       title: "Customer Due",
       value: formatCurrency(summary.customer_due),
       icon: Users,
       color: "customer-due",
     },
-
     {
       title: "Supplier Payable",
       value: formatCurrency(summary.supplier_payable),
       icon: Truck,
       color: "supplier-payable",
     },
-
     {
       title: "Today Expenses",
       value: formatCurrency(summary.today_expenses),
@@ -231,14 +203,12 @@ function Dashboard() {
       icon: ShoppingCart,
       path: "/pos",
     },
-
     {
       title: "Add Product",
       description: "Add item to inventory",
       icon: Package,
       path: "/products",
     },
-
     {
       title: "Add Customer",
       description: "Register a customer",
@@ -276,30 +246,24 @@ function Dashboard() {
   ===================================================== */
 
   const formattedDate =
-    currentDateTime.toLocaleDateString(
-      "en-PK",
-      {
-        weekday: "long",
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }
-    );
+    currentDateTime.toLocaleDateString("en-PK", {
+      weekday: "long",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
 
   /* =====================================================
      TIME
   ===================================================== */
 
   const formattedTime =
-    currentDateTime.toLocaleTimeString(
-      "en-PK",
-      {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      }
-    );
+    currentDateTime.toLocaleTimeString("en-PK", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    });
 
   /* =====================================================
      RENDER
@@ -309,327 +273,167 @@ function Dashboard() {
     <div className="dashboard">
 
       {/* =================================================
-          DASHBOARD HEADER
+          PAGE HEADER
       ================================================= */}
 
-      <div className="dashboard-header">
+      <section className="dashboard-header">
 
-        <div>
-          <h1>{greeting}</h1>
+        <div className="dashboard-header-content">
 
-          <p>
-            Overview of your store business
-            and today's performance.
-          </p>
-        </div>
-
-        <div className="dashboard-datetime">
-
-          <div>
-            {formattedDate}
+          <div className="dashboard-eyebrow">
+            <span className="dashboard-eyebrow-dot" />
+            BUSINESS OVERVIEW
           </div>
 
-          <strong>
-            {formattedTime}
-          </strong>
+          <h1>{greeting}, {user?.username || "there"}</h1>
+
+          <p>
+            Monitor your store performance, sales,
+            inventory and daily business activity.
+          </p>
 
         </div>
 
-      </div>
+        <div className="dashboard-header-right">
+
+          <div className="dashboard-datetime">
+
+            <span>{formattedDate}</span>
+
+            <strong>{formattedTime}</strong>
+
+          </div>
+
+          <button
+            className="dashboard-primary-action"
+            onClick={() => navigate("/pos")}
+          >
+            <ShoppingCart size={18} />
+            New Sale
+            <ArrowUpRight size={16} />
+          </button>
+
+        </div>
+
+      </section>
 
 
       {/* =================================================
           KPI CARDS
       ================================================= */}
 
-      <div className="dashboard-cards">
+      <section className="dashboard-cards">
 
         {cards.map((card) => {
 
           const Icon = card.icon;
 
           return (
-            <div
+            <article
               className={`dashboard-card ${card.color}`}
               key={card.title}
             >
 
               <div className="dashboard-card-top">
 
-                <p>
-                  {card.title}
-                </p>
+                <div>
+                  <p>{card.title}</p>
+                </div>
 
                 <div className="dashboard-card-icon">
-                  <Icon size={22} />
+                  <Icon size={20} />
                 </div>
 
               </div>
 
-              <h2>
-                {card.value}
-              </h2>
+              <h2>{card.value}</h2>
 
-            </div>
+            </article>
           );
         })}
 
-      </div>
+      </section>
 
 
       {/* =================================================
-          QUICK ACTIONS
+          MAIN DASHBOARD GRID
       ================================================= */}
 
-      <div className="quick-actions">
+      <section className="dashboard-main-grid">
 
-        <div className="quick-actions-header">
+        {/* =================================================
+            SALES ANALYTICS
+        ================================================= */}
 
-          <div>
-            <h2>
-              Quick Actions
-            </h2>
-
-            <p>
-              Common tasks for your store
-            </p>
-          </div>
-
-        </div>
-
-
-        <div className="quick-actions-grid">
-
-          {quickActions.map((action) => {
-
-            const Icon = action.icon;
-
-            return (
-              <button
-                key={action.title}
-                className="quick-action"
-                onClick={() =>
-                  navigate(action.path)
-                }
-              >
-
-                <div className="quick-action-icon">
-                  <Icon size={20} />
-                </div>
-
-                <div>
-
-                  <strong>
-                    {action.title}
-                  </strong>
-
-                  <span>
-                    {action.description}
-                  </span>
-
-                </div>
-
-              </button>
-            );
-          })}
-
-        </div>
-
-      </div>
-
-
-      {/* =================================================
-          SALES ANALYTICS
-      ================================================= */}
-
-      <div className="dashboard-chart-section">
-
-        <div className="dashboard-chart-header">
-
-          <div>
-
-            <h2>
-              Sales Analytics
-            </h2>
-
-            <p>
-              Daily sales and invoice performance
-            </p>
-
-          </div>
-
-          <BarChart3 size={24} />
-
-        </div>
-
-
-        <div className="sales-chart">
-
-          {salesChart.length === 0 ? (
-
-            <p>
-              No sales data available.
-            </p>
-
-          ) : (
-
-            <div className="sales-chart-bars">
-
-              {salesChart.map((item) => {
-
-                const totalSales =
-                  Number(
-                    item.total_sales
-                  ) || 0;
-
-                const invoiceCount =
-                  Number(
-                    item.invoice_count
-                  ) || 0;
-
-                const barHeight =
-                  Math.max(
-                    (totalSales /
-                      maxSales) *
-                      145,
-                    7
-                  );
-
-                return (
-                  <div
-                    className="sales-bar-item"
-                    key={item.sale_date}
-                  >
-
-                    <div className="sales-bar-info">
-
-                      <span className="sales-bar-value">
-
-                        {formatCurrency(totalSales)}
-
-                      </span>
-
-                      <span className="sales-bar-invoices">
-
-                        {invoiceCount}{" "}
-                        invoices
-
-                      </span>
-
-                    </div>
-
-
-                    <div
-                      className="sales-bar"
-                      style={{
-                        height: `${barHeight}px`,
-                      }}
-                      title={
-                        `Sales: ${formatCurrency(totalSales)} | ` +
-                        `${invoiceCount} invoices`
-                      }
-                    />
-
-
-                    <span className="sales-bar-date">
-
-                      {item.sale_date}
-
-                    </span>
-
-                  </div>
-                );
-              })}
-
-            </div>
-          )}
-
-        </div>
-
-      </div>
-
-
-      {/* =================================================
-          EXPENSE ANALYTICS
-      ================================================= */}
-
-      {isAdmin && (
-        <div className="dashboard-chart-section">
+        <div className="dashboard-chart-section dashboard-sales-panel">
 
           <div className="dashboard-chart-header">
 
             <div>
 
-              <h2>
-                Expense Analytics
-              </h2>
+              <div className="dashboard-section-label">
+                PERFORMANCE
+              </div>
+
+              <h2>Sales Analytics</h2>
 
               <p>
-                Daily business expense overview
+                Daily sales and invoice performance
               </p>
 
             </div>
 
-            <Wallet size={24} />
+            <div className="dashboard-chart-icon">
+              <BarChart3 size={21} />
+            </div>
 
           </div>
 
 
           <div className="sales-chart">
 
-            {expenseChart.length === 0 ? (
+            {salesChart.length === 0 ? (
 
-              <p>
-                No expense data available.
-              </p>
+              <div className="dashboard-chart-empty">
+                <BarChart3 size={30} />
+                <p>No sales data available.</p>
+              </div>
 
             ) : (
 
               <div className="sales-chart-bars">
 
-                {expenseChart.map((item) => {
+                {salesChart.map((item) => {
 
-                  const totalExpenses =
-                    Number(
-                      item.total_expenses
-                    ) || 0;
+                  const totalSales =
+                    Number(item.total_sales) || 0;
 
-                  const expenseCount =
-                    Number(
-                      item.expense_count
-                    ) || 0;
+                  const invoiceCount =
+                    Number(item.invoice_count) || 0;
 
                   const barHeight =
                     Math.max(
-                      (totalExpenses /
-                        maxExpenses) *
-                        145,
+                      (totalSales / maxSales) * 145,
                       7
                     );
 
                   return (
                     <div
                       className="sales-bar-item"
-                      key={item.expense_date}
+                      key={item.sale_date}
                     >
 
                       <div className="sales-bar-info">
 
                         <span className="sales-bar-value">
-
-                          {formatCurrency(totalExpenses)}
-
+                          {formatCurrency(totalSales)}
                         </span>
 
                         <span className="sales-bar-invoices">
-
-                          {expenseCount}{" "}
-                          expenses
-
+                          {invoiceCount} invoices
                         </span>
 
                       </div>
-
 
                       <div
                         className="sales-bar"
@@ -637,16 +441,13 @@ function Dashboard() {
                           height: `${barHeight}px`,
                         }}
                         title={
-                          `Expenses: ${formatCurrency(totalExpenses)} | ` +
-                          `${expenseCount} expenses`
+                          `Sales: ${formatCurrency(totalSales)} | ` +
+                          `${invoiceCount} invoices`
                         }
                       />
 
-
                       <span className="sales-bar-date">
-
-                        {item.expense_date}
-
+                        {item.sale_date}
                       </span>
 
                     </div>
@@ -659,6 +460,178 @@ function Dashboard() {
           </div>
 
         </div>
+
+
+        {/* =================================================
+            QUICK ACTIONS
+        ================================================= */}
+
+        <div className="quick-actions">
+
+          <div className="quick-actions-header">
+
+            <div>
+
+              <div className="dashboard-section-label">
+                SHORTCUTS
+              </div>
+
+              <h2>Quick Actions</h2>
+
+              <p>
+                Common tasks for your store
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <div className="quick-actions-grid">
+
+            {quickActions.map((action) => {
+
+              const Icon = action.icon;
+
+              return (
+                <button
+                  key={action.title}
+                  className="quick-action"
+                  onClick={() => navigate(action.path)}
+                >
+
+                  <div className="quick-action-icon">
+                    <Icon size={20} />
+                  </div>
+
+                  <div className="quick-action-content">
+
+                    <strong>
+                      {action.title}
+                    </strong>
+
+                    <span>
+                      {action.description}
+                    </span>
+
+                  </div>
+
+                  <ArrowUpRight
+                    className="quick-action-arrow"
+                    size={17}
+                  />
+
+                </button>
+              );
+            })}
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      {/* =================================================
+          EXPENSE ANALYTICS
+      ================================================= */}
+
+      {isAdmin && (
+        <section className="dashboard-chart-section dashboard-expense-panel">
+
+          <div className="dashboard-chart-header">
+
+            <div>
+
+              <div className="dashboard-section-label">
+                FINANCIAL OVERVIEW
+              </div>
+
+              <h2>Expense Analytics</h2>
+
+              <p>
+                Daily business expense overview
+              </p>
+
+            </div>
+
+            <div className="dashboard-chart-icon">
+              <Wallet size={21} />
+            </div>
+
+          </div>
+
+
+          <div className="sales-chart">
+
+            {expenseChart.length === 0 ? (
+
+              <div className="dashboard-chart-empty">
+                <Wallet size={30} />
+                <p>No expense data available.</p>
+              </div>
+
+            ) : (
+
+              <div className="sales-chart-bars">
+
+                {expenseChart.map((item) => {
+
+                  const totalExpenses =
+                    Number(item.total_expenses) || 0;
+
+                  const expenseCount =
+                    Number(item.expense_count) || 0;
+
+                  const barHeight =
+                    Math.max(
+                      (totalExpenses / maxExpenses) * 145,
+                      7
+                    );
+
+                  return (
+                    <div
+                      className="sales-bar-item"
+                      key={item.expense_date}
+                    >
+
+                      <div className="sales-bar-info">
+
+                        <span className="sales-bar-value">
+                          {formatCurrency(totalExpenses)}
+                        </span>
+
+                        <span className="sales-bar-invoices">
+                          {expenseCount} expenses
+                        </span>
+
+                      </div>
+
+                      <div
+                        className="sales-bar"
+                        style={{
+                          height: `${barHeight}px`,
+                        }}
+                        title={
+                          `Expenses: ${formatCurrency(totalExpenses)} | ` +
+                          `${expenseCount} expenses`
+                        }
+                      />
+
+                      <span className="sales-bar-date">
+                        {item.expense_date}
+                      </span>
+
+                    </div>
+                  );
+                })}
+
+              </div>
+            )}
+
+          </div>
+
+        </section>
       )}
 
     </div>
@@ -666,4 +639,3 @@ function Dashboard() {
 }
 
 export default Dashboard;
-

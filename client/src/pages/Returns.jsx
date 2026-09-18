@@ -1,4 +1,23 @@
 import { useEffect, useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgeDollarSign,
+  CalendarDays,
+  CheckCircle2,
+  CircleDollarSign,
+  FileCheck2,
+  FileText,
+  History,
+  Package,
+  RefreshCcw,
+  RotateCcw,
+  Search,
+  UserRound,
+  WalletCards,
+  X,
+} from "lucide-react";
+
 import api from "../services/api";
 import { useSettings } from "../context/SettingsContext";
 import { useNotification } from "../context/NotificationContext";
@@ -6,6 +25,7 @@ import { useNotification } from "../context/NotificationContext";
 function Returns() {
   const { currency } = useSettings();
   const { showSuccess, showError } = useNotification();
+
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,9 +86,7 @@ function Returns() {
     try {
       setInvoiceLoading(true);
 
-      const response = await api.get(
-        `/invoices/${id}`
-      );
+      const response = await api.get(`/invoices/${id}`);
 
       setSelectedInvoice(response.data.data);
     } catch (error) {
@@ -99,6 +117,10 @@ function Returns() {
         quantity * Number(item.unit_price || 0)
       );
     }, 0) || 0;
+
+  const selectedReturnItems = Object.values(
+    returnQuantities
+  ).filter((quantity) => Number(quantity) > 0).length;
 
   const handleReturnQuantityChange = (
     productId,
@@ -179,227 +201,540 @@ function Returns() {
     }
   };
 
+  const formatMoney = (amount) =>
+    Number(amount || 0).toLocaleString();
+
+  const getPaymentLabel = (method) => {
+    const labels = {
+      cash: "Cash",
+      bank: "Bank",
+      easypaisa: "Easypaisa",
+      jazzcash: "JazzCash",
+    };
+
+    return labels[method] || method || "-";
+  };
+
+  const getPaymentClass = (method) => {
+    const classes = {
+      cash: "return-payment-badge cash",
+      bank: "return-payment-badge bank",
+      easypaisa: "return-payment-badge easypaisa",
+      jazzcash: "return-payment-badge jazzcash",
+    };
+
+    return classes[method] || "return-payment-badge";
+  };
+
   return (
     <div className="returns-page">
-      <div className="page-header">
-        <div>
-          <h1>Returns</h1>
-          <p>Manage sale returns and refunds.</p>
+      {/* PAGE HEADER */}
+
+      <div className="returns-page-header">
+        <div className="returns-header-content">
+          <div className="returns-eyebrow">
+            <RotateCcw size={14} />
+            RETURN MANAGEMENT
+          </div>
+
+          <h1>Returns & Refunds</h1>
+
+          <p>
+            Process customer returns, manage refunds, and review
+            return history.
+          </p>
+        </div>
+
+        <div className="returns-header-badge">
+          <RefreshCcw size={18} />
+          <span>Return Processing</span>
+        </div>
+      </div>
+
+      {/* SUMMARY CARDS */}
+
+      <div className="returns-summary-grid">
+        <div className="returns-summary-card blue">
+          <div className="returns-summary-top">
+            <div className="returns-summary-icon blue">
+              <History size={21} />
+            </div>
+
+            <span className="returns-summary-label">
+              Total Returns
+            </span>
+          </div>
+
+          <strong className="returns-summary-value">
+            {returns.length}
+          </strong>
+
+          <span className="returns-summary-footer">
+            Recorded return transactions
+          </span>
+        </div>
+
+        <div className="returns-summary-card red">
+          <div className="returns-summary-top">
+            <div className="returns-summary-icon red">
+              <BadgeDollarSign size={21} />
+            </div>
+
+            <span className="returns-summary-label">
+              Total Refunds
+            </span>
+          </div>
+
+          <strong className="returns-summary-value">
+            {currency}{" "}
+            {formatMoney(
+              returns.reduce(
+                (total, item) =>
+                  total + Number(item.total_refund || 0),
+                0
+              )
+            )}
+          </strong>
+
+          <span className="returns-summary-footer">
+            Refund amount processed
+          </span>
+        </div>
+
+        <div className="returns-summary-card amber">
+          <div className="returns-summary-top">
+            <div className="returns-summary-icon amber">
+              <FileCheck2 size={21} />
+            </div>
+
+            <span className="returns-summary-label">
+              Available Invoices
+            </span>
+          </div>
+
+          <strong className="returns-summary-value">
+            {invoices.length}
+          </strong>
+
+          <span className="returns-summary-footer">
+            Invoices available for returns
+          </span>
         </div>
       </div>
 
       {/* SELECT INVOICE */}
 
-      <div className="suppliers-card">
-        <h2>Select Invoice</h2>
+      <div className="return-workspace">
+        <div className="return-workspace-header">
+          <div>
+            <div className="return-section-title">
+              <span className="return-section-icon blue">
+                <Search size={18} />
+              </span>
 
-        <div className="form-group">
-          <label>Invoice</label>
+              Select Invoice
+            </div>
 
-          <select
-            value={invoiceId}
-            onChange={(e) =>
-              handleInvoiceSelect(e.target.value)
-            }
-          >
-            <option value="">
-              Select an invoice
-            </option>
+            <p>
+              Select the original invoice to start processing a
+              customer return.
+            </p>
+          </div>
 
-            {invoices.map((invoice) => (
-              <option
-                key={invoice.id}
-                value={invoice.id}
-              >
-                {invoice.invoice_number} -{" "}
-                {invoice.customer_name ||
-                  "Walk-in Customer"}{" "}
-                - {currency}{" "}
-                {Number(
-                  invoice.grand_total || 0
-                ).toLocaleString()}
-              </option>
-            ))}
-          </select>
+          <div className="return-status-badge">
+            <span />
+            Ready
+          </div>
         </div>
 
-        {invoiceLoading && (
-          <p>Loading invoice...</p>
-        )}
+        <div className="return-invoice-selector">
+          <div className="return-form-group">
+            <label>
+              <FileText size={14} />
+              Invoice
+            </label>
+
+            <select
+              value={invoiceId}
+              onChange={(e) =>
+                handleInvoiceSelect(e.target.value)
+              }
+              disabled={invoiceLoading || processingReturn}
+            >
+              <option value="">
+                Select an invoice
+              </option>
+
+              {invoices.map((invoice) => (
+                <option
+                  key={invoice.id}
+                  value={invoice.id}
+                >
+                  {invoice.invoice_number} -{" "}
+                  {invoice.customer_name ||
+                    "Walk-in Customer"}{" "}
+                  - {currency}{" "}
+                  {formatMoney(invoice.grand_total)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {invoiceLoading && (
+            <div className="return-loading-inline">
+              <RefreshCcw size={16} className="return-spin" />
+              Loading invoice details...
+            </div>
+          )}
+        </div>
       </div>
 
       {/* INVOICE DETAILS */}
 
       {selectedInvoice && (
-        <div className="suppliers-card">
-          <h2>Invoice Details</h2>
-
-          <div className="form-grid">
+        <div className="return-workspace return-details-workspace">
+          <div className="return-workspace-header">
             <div>
-              <strong>Invoice:</strong>{" "}
+              <div className="return-section-title">
+                <span className="return-section-icon blue">
+                  <FileCheck2 size={18} />
+                </span>
+
+                Invoice Details
+              </div>
+
+              <p>
+                Review invoice information and choose products
+                to return.
+              </p>
+            </div>
+
+            <div className="return-invoice-number">
+              <FileText size={15} />
               {selectedInvoice.invoice.invoice_number}
-            </div>
-
-            <div>
-              <strong>Customer:</strong>{" "}
-              {selectedInvoice.invoice.customer_name ||
-                "Walk-in Customer"}
-            </div>
-
-            <div>
-              <strong>Total:</strong> {currency}{" "}
-              {Number(
-                selectedInvoice.invoice.grand_total || 0
-              ).toLocaleString()}
-            </div>
-
-            <div>
-              <strong>Paid:</strong> {currency}{" "}
-              {Number(
-                selectedInvoice.invoice.paid_amount || 0
-              ).toLocaleString()}
-            </div>
-
-            <div>
-              <strong>Due:</strong> {currency}{" "}
-              {Number(
-                selectedInvoice.invoice.due_amount || 0
-              ).toLocaleString()}
             </div>
           </div>
 
-          <h3>Products</h3>
+          {/* INVOICE INFO */}
+
+          <div className="return-invoice-info-grid">
+            <div className="return-info-card">
+              <div className="return-info-icon blue">
+                <FileText size={18} />
+              </div>
+
+              <div>
+                <span>Invoice</span>
+                <strong>
+                  {selectedInvoice.invoice.invoice_number}
+                </strong>
+              </div>
+            </div>
+
+            <div className="return-info-card">
+              <div className="return-info-icon purple">
+                <UserRound size={18} />
+              </div>
+
+              <div>
+                <span>Customer</span>
+                <strong>
+                  {selectedInvoice.invoice.customer_name ||
+                    "Walk-in Customer"}
+                </strong>
+              </div>
+            </div>
+
+            <div className="return-info-card">
+              <div className="return-info-icon green">
+                <CircleDollarSign size={18} />
+              </div>
+
+              <div>
+                <span>Invoice Total</span>
+                <strong>
+                  {currency}{" "}
+                  {formatMoney(
+                    selectedInvoice.invoice.grand_total
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <div className="return-info-card">
+              <div className="return-info-icon amber">
+                <WalletCards size={18} />
+              </div>
+
+              <div>
+                <span>Paid</span>
+                <strong>
+                  {currency}{" "}
+                  {formatMoney(
+                    selectedInvoice.invoice.paid_amount
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <div className="return-info-card">
+              <div className="return-info-icon red">
+                <BadgeDollarSign size={18} />
+              </div>
+
+              <div>
+                <span>Due</span>
+                <strong>
+                  {currency}{" "}
+                  {formatMoney(
+                    selectedInvoice.invoice.due_amount
+                  )}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          {/* PRODUCTS */}
 
           <form onSubmit={handleSubmitReturn}>
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th>Quantity Sold</th>
-                    <th>Return Quantity</th>
-                    <th>Unit Price</th>
-                    <th>Total</th>
-                  </tr>
-                </thead>
+            <div className="return-products-section">
+              <div className="return-section-heading-row">
+                <div>
+                  <h3>
+                    <Package size={18} />
+                    Products
+                  </h3>
 
-                <tbody>
-                  {selectedInvoice.items.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.product_name}</td>
+                  <p>
+                    Enter the quantity you want to return for
+                    each product.
+                  </p>
+                </div>
 
-                      <td>{item.quantity}</td>
+                <span className="return-selected-count">
+                  {selectedReturnItems} selected
+                </span>
+              </div>
 
-                      <td>
-                        <input
-                          type="number"
-                          min="0"
-                          max={item.quantity}
-                          value={
-                            returnQuantities[
-                              item.product_id
-                            ] || 0
-                          }
-                          onChange={(e) =>
-                            handleReturnQuantityChange(
-                              item.product_id,
-                              e.target.value,
-                              item.quantity
-                            )
-                          }
-                          className="return-quantity-input"
-                        />
-                      </td>
-
-                      <td>
-                        {currency}{" "}
-                        {Number(
-                          item.unit_price || 0
-                        ).toLocaleString()}
-                      </td>
-
-                      <td>
-                        {currency}{" "}
-                        {Number(
-                          item.total || 0
-                        ).toLocaleString()}
-                      </td>
+              <div className="return-table-wrapper">
+                <table className="return-table">
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>Quantity Sold</th>
+                      <th>Return Quantity</th>
+                      <th>Unit Price</th>
+                      <th className="return-th-right">
+                        Return Total
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+
+                  <tbody>
+                    {selectedInvoice.items.map((item) => {
+                      const returnQuantity = Number(
+                        returnQuantities[item.product_id] || 0
+                      );
+
+                      const itemRefund =
+                        returnQuantity *
+                        Number(item.unit_price || 0);
+
+                      return (
+                        <tr key={item.id}>
+                          <td>
+                            <div className="return-product-cell">
+                              <div className="return-product-icon">
+                                <Package size={17} />
+                              </div>
+
+                              <div>
+                                <strong>
+                                  {item.product_name}
+                                </strong>
+
+                                <span>
+                                  Product #{item.product_id}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td>
+                            <span className="return-sold-qty">
+                              {item.quantity}
+                            </span>
+                          </td>
+
+                          <td>
+                            <div className="return-qty-control">
+                              <input
+                                type="number"
+                                min="0"
+                                max={item.quantity}
+                                value={returnQuantity}
+                                onChange={(e) =>
+                                  handleReturnQuantityChange(
+                                    item.product_id,
+                                    e.target.value,
+                                    item.quantity
+                                  )
+                                }
+                                className="return-quantity-input"
+                                disabled={processingReturn}
+                              />
+
+                              <span>
+                                max {item.quantity}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td>
+                            <span className="return-money">
+                              {currency}{" "}
+                              {formatMoney(item.unit_price)}
+                            </span>
+                          </td>
+
+                          <td className="return-total-cell">
+                            <strong>
+                              {currency}{" "}
+                              {formatMoney(itemRefund)}
+                            </strong>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* REFUND DETAILS */}
+
+            <div className="return-refund-section">
+              <div className="return-section-heading-row">
+                <div>
+                  <h3>
+                    <WalletCards size={18} />
+                    Refund Details
+                  </h3>
+
+                  <p>
+                    Select the refund method and provide a
+                    reason for the return.
+                  </p>
+                </div>
+              </div>
+
+              <div className="return-refund-grid">
+                <div className="return-form-group">
+                  <label>
+                    <WalletCards size={14} />
+                    Refund Method
+                  </label>
+
+                  <select
+                    value={refundMethod}
+                    onChange={(e) =>
+                      setRefundMethod(e.target.value)
+                    }
+                    disabled={processingReturn}
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="bank">Bank</option>
+                    <option value="easypaisa">
+                      Easypaisa
+                    </option>
+                    <option value="jazzcash">
+                      JazzCash
+                    </option>
+                  </select>
+
+                  <span
+                    className={getPaymentClass(refundMethod)}
+                  >
+                    {getPaymentLabel(refundMethod)}
+                  </span>
+                </div>
+
+                <div className="return-form-group">
+                  <label>
+                    <FileText size={14} />
+                    Reason
+                  </label>
+
+                  <input
+                    type="text"
+                    value={reason}
+                    onChange={(e) =>
+                      setReason(e.target.value)
+                    }
+                    placeholder="e.g. Damaged product"
+                    disabled={processingReturn}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* REFUND SUMMARY */}
 
-            <div className="form-grid">
-              <div className="form-group">
-                <label>Refund Method</label>
+            <div className="return-refund-summary">
+              <div className="return-refund-summary-left">
+                <div className="return-refund-summary-icon">
+                  <CircleDollarSign size={24} />
+                </div>
 
-                <select
-                  value={refundMethod}
-                  onChange={(e) =>
-                    setRefundMethod(e.target.value)
-                  }
-                >
-                  <option value="cash">
-                    Cash
-                  </option>
+                <div>
+                  <span>Total Refund Amount</span>
 
-                  <option value="bank">
-                    Bank
-                  </option>
-
-                  <option value="easypaisa">
-                    Easypaisa
-                  </option>
-
-                  <option value="jazzcash">
-                    JazzCash
-                  </option>
-                </select>
+                  <small>
+                    {selectedReturnItems} product
+                    {selectedReturnItems !== 1 ? "s" : ""}{" "}
+                    selected for return
+                  </small>
+                </div>
               </div>
 
-              <div className="form-group">
-                <label>Reason</label>
-
-                <input
-                  type="text"
-                  value={reason}
-                  onChange={(e) =>
-                    setReason(e.target.value)
-                  }
-                  placeholder="e.g. Damaged product"
-                />
-              </div>
-            </div>
-
-            <div className="form-actions">
               <strong>
-                Refund Amount: {currency}{" "}
-                {refundTotal.toLocaleString()}
+                {currency} {refundTotal.toLocaleString()}
               </strong>
             </div>
 
-            <div className="form-actions">
+            {/* ACTIONS */}
+
+            <div className="return-form-actions">
               <button
                 type="submit"
-                className="primary-btn"
+                className="return-process-btn"
                 disabled={processingReturn}
               >
-                {processingReturn
-                  ? "Processing..."
-                  : "Process Return"}
+                {processingReturn ? (
+                  <>
+                    <RefreshCcw
+                      size={17}
+                      className="return-spin"
+                    />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={17} />
+                    Process Return
+                  </>
+                )}
               </button>
 
               <button
                 type="button"
-                className="secondary-btn"
+                className="return-cancel-btn"
                 disabled={processingReturn}
                 onClick={() =>
                   handleInvoiceSelect("")
                 }
               >
+                <X size={17} />
                 Cancel
               </button>
             </div>
@@ -409,16 +744,55 @@ function Returns() {
 
       {/* RETURN HISTORY */}
 
-      <div className="suppliers-card">
-        <h2>Return History</h2>
+      <div className="return-history-card">
+        <div className="return-history-header">
+          <div>
+            <div className="return-section-title">
+              <span className="return-section-icon purple">
+                <History size={18} />
+              </span>
+
+              Return History
+            </div>
+
+            <p>
+              Review all previously processed customer returns
+              and refunds.
+            </p>
+          </div>
+
+          <span className="return-history-count">
+            {returns.length} record
+            {returns.length !== 1 ? "s" : ""}
+          </span>
+        </div>
 
         {loading ? (
-          <p>Loading returns...</p>
+          <div className="return-state-card">
+            <RefreshCcw
+              size={25}
+              className="return-spin"
+            />
+            <strong>Loading returns...</strong>
+            <span>
+              Please wait while return history is loaded.
+            </span>
+          </div>
         ) : returns.length === 0 ? (
-          <p>No returns found.</p>
+          <div className="return-state-card">
+            <div className="return-empty-icon">
+              <History size={28} />
+            </div>
+
+            <strong>No returns found</strong>
+
+            <span>
+              Process your first customer return to see it here.
+            </span>
+          </div>
         ) : (
-          <div className="table-wrapper">
-            <table>
+          <div className="return-history-table-wrapper">
+            <table className="return-history-table">
               <thead>
                 <tr>
                   <th>Return Number</th>
@@ -435,39 +809,71 @@ function Returns() {
                 {returns.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      {item.return_number}
+                      <div className="return-number-cell">
+                        <div className="return-row-icon">
+                          <RotateCcw size={16} />
+                        </div>
+
+                        <strong>
+                          {item.return_number}
+                        </strong>
+                      </div>
                     </td>
 
                     <td>
-                      {item.invoice_number || "-"}
+                      <span className="return-invoice-badge">
+                        {item.invoice_number || "-"}
+                      </span>
                     </td>
 
                     <td>
-                      {item.customer_name ||
-                        "Walk-in Customer"}
+                      <div className="return-customer-cell">
+                        <div className="return-customer-avatar">
+                          <UserRound size={15} />
+                        </div>
+
+                        <span>
+                          {item.customer_name ||
+                            "Walk-in Customer"}
+                        </span>
+                      </div>
                     </td>
 
                     <td>
-                      {currency}{" "}
-                      {Number(
-                        item.total_refund || 0
-                      ).toLocaleString()}
+                      <strong className="return-history-refund">
+                        {currency}{" "}
+                        {formatMoney(item.total_refund)}
+                      </strong>
                     </td>
 
                     <td>
-                      {item.refund_method || "-"}
+                      <span
+                        className={getPaymentClass(
+                          item.refund_method
+                        )}
+                      >
+                        {getPaymentLabel(
+                          item.refund_method
+                        )}
+                      </span>
                     </td>
 
                     <td>
-                      {item.reason || "-"}
+                      <span className="return-reason">
+                        {item.reason || "-"}
+                      </span>
                     </td>
 
                     <td>
-                      {item.created_at
-                        ? new Date(
-                            item.created_at
-                          ).toLocaleString()
-                        : "-"}
+                      <div className="return-date-cell">
+                        <CalendarDays size={14} />
+
+                        {item.created_at
+                          ? new Date(
+                              item.created_at
+                            ).toLocaleString()
+                          : "-"}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -481,4 +887,3 @@ function Returns() {
 }
 
 export default Returns;
-

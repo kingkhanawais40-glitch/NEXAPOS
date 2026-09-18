@@ -221,12 +221,42 @@ router.post(
 
                 totalAmount += total;
 
+                // ---------------------------------------------
+                // VALIDATE BATCH NUMBER
+                // ---------------------------------------------
+
+                const batchNumber =
+                    String(item.batch_number || "").trim();
+
+                if (!batchNumber) {
+                    throw new Error(
+                        `Batch number is required for ${product.name}`
+                    );
+                }
+
+                // ---------------------------------------------
+                // VALIDATE EXPIRY DATE
+                // ---------------------------------------------
+
+                const expiryDate =
+                    item.expiry_date ?
+                    String(item.expiry_date).trim() :
+                    null;
+
+                if (expiryDate && !/^\d{4}-\d{2}-\d{2}$/.test(expiryDate)) {
+                    throw new Error(
+                        `Invalid expiry date for ${product.name}`
+                    );
+                }
+
                 validatedItems.push({
                     productId,
                     quantity,
                     purchasePrice,
                     total,
-                    productName: product.name
+                    productName: product.name,
+                    batchNumber: String(item.batch_number || "").trim(),
+                    expiryDate: item.expiry_date || null
                 });
             }
 
@@ -366,6 +396,30 @@ router.post(
                             item.quantity,
                             item.purchasePrice,
                             item.total
+                        ]
+                    });
+
+                    // ---------------------------------------------
+                    // SAVE PRODUCT BATCH
+                    // ---------------------------------------------
+
+                    await transaction.execute({
+                        sql: `
+        INSERT INTO product_batches (
+            product_id,
+            batch_number,
+            expiry_date,
+            quantity,
+            purchase_price
+        )
+        VALUES (?, ?, ?, ?, ?)
+    `,
+                        args: [
+                            item.productId,
+                            item.batchNumber,
+                            item.expiryDate,
+                            item.quantity,
+                            item.purchasePrice
                         ]
                     });
 

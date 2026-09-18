@@ -1,13 +1,30 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
 import { useSettings } from "../context/SettingsContext";
+import {
+  CalendarDays,
+  WalletCards,
+  Banknote,
+  Smartphone,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Calculator,
+  CircleCheck,
+  CircleAlert,
+  TrendingUp,
+  TrendingDown,
+  RefreshCcw,
+  Save,
+  FileText,
+  History,
+  ShieldCheck,
+  ReceiptText,
+} from "lucide-react";
 
 /* =========================================================
    DATE HELPERS
 ========================================================= */
 
-// Returns today's date in YYYY-MM-DD format
-// Uses local browser time instead of UTC.
 function todayDate() {
   const now = new Date();
 
@@ -18,14 +35,11 @@ function todayDate() {
   return `${year}-${month}-${day}`;
 }
 
-// Safely format a date for displaying in the history table.
 function formatDate(dateValue) {
   if (!dateValue) {
     return "-";
   }
 
-  // If backend already returns YYYY-MM-DD,
-  // don't pass it through new Date() unnecessarily.
   if (
     typeof dateValue === "string" &&
     /^\d{4}-\d{2}-\d{2}$/.test(dateValue)
@@ -37,7 +51,6 @@ function formatDate(dateValue) {
 
   const parsedDate = new Date(dateValue);
 
-  // Prevent "Invalid Date"
   if (Number.isNaN(parsedDate.getTime())) {
     return "-";
   }
@@ -47,6 +60,10 @@ function formatDate(dateValue) {
   const year = parsedDate.getFullYear();
 
   return `${day}-${month}-${year}`;
+}
+
+function formatMoney(value) {
+  return Number(value || 0).toLocaleString();
 }
 
 function DailyClosing() {
@@ -227,6 +244,61 @@ function DailyClosing() {
   };
 
   /* =========================================================
+     PAYMENT METHOD DATA
+  ========================================================= */
+
+  const paymentMethods = [
+    {
+      label: "Cash Sales",
+      value: summary?.cash_sales || 0,
+      icon: Banknote,
+      className: "cash",
+    },
+    {
+      label: "Bank Sales",
+      value: summary?.bank_sales || 0,
+      icon: WalletCards,
+      className: "bank",
+    },
+    {
+      label: "Easypaisa Sales",
+      value: summary?.easypaisa_sales || 0,
+      icon: Smartphone,
+      className: "easypaisa",
+    },
+    {
+      label: "JazzCash Sales",
+      value: summary?.jazzcash_sales || 0,
+      icon: Smartphone,
+      className: "jazzcash",
+    },
+  ];
+
+  const cashMovements = [
+    {
+      label: "Customer Cash Payments",
+      description: "Cash received from customers",
+      value: summary?.customer_cash_payments || 0,
+      icon: ArrowDownToLine,
+      type: "in",
+    },
+    {
+      label: "Cash Expenses",
+      description: "Cash paid for expenses",
+      value: summary?.cash_expenses || 0,
+      icon: ArrowUpFromLine,
+      type: "out",
+    },
+    {
+      label: "Supplier Cash Payments",
+      description: "Cash paid to suppliers",
+      value: summary?.supplier_cash_payments || 0,
+      icon: ArrowUpFromLine,
+      type: "out",
+    },
+  ];
+
+  /* =========================================================
      UI
   ========================================================= */
 
@@ -237,24 +309,37 @@ function DailyClosing() {
           PAGE HEADER
       ===================================================== */}
 
-      <div className="page-header">
-        <div>
+      <div className="closing-page-header">
+        <div className="closing-header-content">
+          <div className="closing-eyebrow">
+            <WalletCards size={15} />
+            CASH MANAGEMENT
+          </div>
+
           <h1>Daily Cash Closing</h1>
 
           <p>
-            Reconcile today's expected cash against what was
-            actually counted.
+            Reconcile expected cash with the actual amount
+            counted at the end of the business day.
           </p>
         </div>
 
-        <input
-          type="date"
-          value={date}
-          max={todayDate()}
-          onChange={(e) => {
-            setDate(e.target.value);
-          }}
-        />
+        <div className="closing-date-picker">
+          <CalendarDays size={18} />
+
+          <div>
+            <span>Closing Date</span>
+
+            <input
+              type="date"
+              value={date}
+              max={todayDate()}
+              onChange={(e) => {
+                setDate(e.target.value);
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* =====================================================
@@ -262,274 +347,588 @@ function DailyClosing() {
       ===================================================== */}
 
       {error && (
-        <div className="alert alert-error">
-          {error}
+        <div className="closing-alert closing-alert-error">
+          <div className="closing-alert-icon">
+            <CircleAlert size={19} />
+          </div>
+
+          <div>
+            <strong>Unable to complete</strong>
+            <p>{error}</p>
+          </div>
         </div>
       )}
 
       {successMsg && (
-        <div className="alert alert-success">
-          {successMsg}
+        <div className="closing-alert closing-alert-success">
+          <div className="closing-alert-icon">
+            <CircleCheck size={19} />
+          </div>
+
+          <div>
+            <strong>Closing Saved</strong>
+            <p>{successMsg}</p>
+          </div>
         </div>
       )}
 
       {/* =====================================================
-          LOADING / SUMMARY
+          LOADING
       ===================================================== */}
 
       {loading ? (
-        <p>Loading...</p>
+        <div className="closing-loading-card">
+          <div className="closing-loading-icon">
+            <RefreshCcw size={22} />
+          </div>
+
+          <div>
+            <strong>Loading daily summary...</strong>
+            <p>Preparing today's cash reconciliation.</p>
+          </div>
+        </div>
       ) : summary ? (
         <>
           {/* =================================================
-              SALES BY PAYMENT METHOD
+              SUMMARY OVERVIEW
           ================================================= */}
 
-          <div className="closing-grid">
+          <div className="closing-overview-grid">
 
-            <div className="closing-card">
-              <h3>Sales by Payment Method</h3>
+            <div className="closing-overview-card primary">
+              <div className="closing-overview-top">
+                <div className="closing-overview-icon">
+                  <Calculator size={21} />
+                </div>
 
-              <p>
-                <span>Cash Sales</span>
-
-                <span>
-                  {currency}{" "}
-                  {Number(
-                    summary.cash_sales || 0
-                  ).toLocaleString()}
+                <span className="closing-overview-label">
+                  Expected Closing Cash
                 </span>
-              </p>
+              </div>
 
-              <p>
-                <span>Bank Sales</span>
+              <strong className="closing-overview-value">
+                {currency} {formatMoney(expectedCash)}
+              </strong>
 
-                <span>
-                  {currency}{" "}
-                  {Number(
-                    summary.bank_sales || 0
-                  ).toLocaleString()}
-                </span>
-              </p>
-
-              <p>
-                <span>Easypaisa Sales</span>
-
-                <span>
-                  {currency}{" "}
-                  {Number(
-                    summary.easypaisa_sales || 0
-                  ).toLocaleString()}
-                </span>
-              </p>
-
-              <p>
-                <span>JazzCash Sales</span>
-
-                <span>
-                  {currency}{" "}
-                  {Number(
-                    summary.jazzcash_sales || 0
-                  ).toLocaleString()}
-                </span>
-              </p>
+              <span className="closing-overview-footer">
+                Opening cash + cash inflows − cash outflows
+              </span>
             </div>
 
-            {/* ===============================================
+            <div className="closing-overview-card">
+              <div className="closing-overview-top">
+                <div className="closing-overview-icon blue">
+                  <Banknote size={21} />
+                </div>
+
+                <span className="closing-overview-label">
+                  Cash Sales
+                </span>
+              </div>
+
+              <strong className="closing-overview-value">
+                {currency}{" "}
+                {formatMoney(summary.cash_sales)}
+              </strong>
+
+              <span className="closing-overview-footer">
+                Today's cash sales
+              </span>
+            </div>
+
+            <div className="closing-overview-card">
+              <div className="closing-overview-top">
+                <div className="closing-overview-icon green">
+                  <ArrowDownToLine size={21} />
+                </div>
+
+                <span className="closing-overview-label">
+                  Cash Received
+                </span>
+              </div>
+
+              <strong className="closing-overview-value">
+                {currency}{" "}
+                {formatMoney(
+                  summary.customer_cash_payments
+                )}
+              </strong>
+
+              <span className="closing-overview-footer">
+                Customer payments received
+              </span>
+            </div>
+
+            <div className="closing-overview-card">
+              <div className="closing-overview-top">
+                <div className="closing-overview-icon red">
+                  <ArrowUpFromLine size={21} />
+                </div>
+
+                <span className="closing-overview-label">
+                  Cash Outflow
+                </span>
+              </div>
+
+              <strong className="closing-overview-value">
+                {currency}{" "}
+                {formatMoney(
+                  Number(summary.cash_expenses || 0) +
+                    Number(
+                      summary.supplier_cash_payments || 0
+                    )
+                )}
+              </strong>
+
+              <span className="closing-overview-footer">
+                Expenses + supplier payments
+              </span>
+            </div>
+
+          </div>
+
+          {/* =================================================
+              PAYMENT METHODS + CASH MOVEMENTS
+          ================================================= */}
+
+          <div className="closing-section-grid">
+
+            {/* =================================================
+                SALES BY PAYMENT METHOD
+            ================================================= */}
+
+            <div className="closing-card closing-payment-card">
+
+              <div className="closing-card-header">
+                <div>
+                  <div className="closing-card-title-row">
+                    <div className="closing-section-icon blue">
+                      <ReceiptText size={18} />
+                    </div>
+
+                    <h3>Sales by Payment Method</h3>
+                  </div>
+
+                  <p>
+                    Breakdown of today's sales collection.
+                  </p>
+                </div>
+              </div>
+
+              <div className="closing-payment-list">
+
+                {paymentMethods.map((method) => {
+                  const Icon = method.icon;
+
+                  return (
+                    <div
+                      className="closing-payment-row"
+                      key={method.label}
+                    >
+                      <div className="closing-payment-left">
+                        <div
+                          className={`closing-payment-icon ${method.className}`}
+                        >
+                          <Icon size={18} />
+                        </div>
+
+                        <div>
+                          <strong>{method.label}</strong>
+                          <span>
+                            {method.className === "cash"
+                              ? "Physical cash"
+                              : method.className === "bank"
+                              ? "Bank / card payment"
+                              : method.className ===
+                                "easypaisa"
+                              ? "Digital payment"
+                              : "Mobile wallet"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <strong className="closing-payment-value">
+                        {currency}{" "}
+                        {formatMoney(method.value)}
+                      </strong>
+                    </div>
+                  );
+                })}
+
+              </div>
+            </div>
+
+            {/* =================================================
                 OTHER CASH MOVEMENTS
-            =============================================== */}
+            ================================================= */}
 
-            <div className="closing-card">
-              <h3>Other Cash Movements</h3>
+            <div className="closing-card closing-payment-card">
 
-              <p>
-                <span>
-                  Customer Cash Payments (in)
-                </span>
+              <div className="closing-card-header">
+                <div>
+                  <div className="closing-card-title-row">
+                    <div className="closing-section-icon purple">
+                      <WalletCards size={18} />
+                    </div>
 
-                <span>
-                  {currency}{" "}
-                  {Number(
-                    summary.customer_cash_payments || 0
-                  ).toLocaleString()}
-                </span>
-              </p>
+                    <h3>Other Cash Movements</h3>
+                  </div>
 
-              <p>
-                <span>Cash Expenses (out)</span>
+                  <p>
+                    Additional cash coming in and going out.
+                  </p>
+                </div>
+              </div>
 
-                <span>
-                  {currency}{" "}
-                  {Number(
-                    summary.cash_expenses || 0
-                  ).toLocaleString()}
-                </span>
-              </p>
+              <div className="closing-payment-list">
 
-              <p>
-                <span>
-                  Supplier Cash Payments (out)
-                </span>
+                {cashMovements.map((movement) => {
+                  const Icon = movement.icon;
 
-                <span>
-                  {currency}{" "}
-                  {Number(
-                    summary.supplier_cash_payments || 0
-                  ).toLocaleString()}
-                </span>
-              </p>
+                  return (
+                    <div
+                      className="closing-payment-row"
+                      key={movement.label}
+                    >
+                      <div className="closing-payment-left">
+                        <div
+                          className={`closing-payment-icon ${
+                            movement.type
+                          }`}
+                        >
+                          <Icon size={18} />
+                        </div>
+
+                        <div>
+                          <strong>{movement.label}</strong>
+                          <span>
+                            {movement.description}
+                          </span>
+                        </div>
+                      </div>
+
+                      <strong
+                        className={`closing-payment-value ${
+                          movement.type
+                        }`}
+                      >
+                        {movement.type === "in"
+                          ? "+"
+                          : "-"}{" "}
+                        {currency}{" "}
+                        {formatMoney(movement.value)}
+                      </strong>
+                    </div>
+                  );
+                })}
+
+              </div>
             </div>
+
           </div>
 
           {/* =================================================
               CASH RECONCILIATION
           ================================================= */}
 
-          <div className="closing-card closing-calc">
+          <div className="closing-card closing-reconciliation">
 
-            <h3>
-              Cash Reconciliation{" "}
+            <div className="closing-reconciliation-header">
+              <div>
+                <div className="closing-card-title-row">
+                  <div className="closing-section-icon blue">
+                    <Calculator size={19} />
+                  </div>
 
-              {isClosed && (
-                <span className="closed-badge">
-                  Already Closed
-                </span>
-              )}
-            </h3>
+                  <h3>Cash Reconciliation</h3>
 
-            {/* ===============================================
-                CASH INPUTS
-            =============================================== */}
+                  {isClosed && (
+                    <span className="closing-closed-badge">
+                      <CircleCheck size={14} />
+                      Already Closed
+                    </span>
+                  )}
+                </div>
 
-            <div className="closing-form-row">
+                <p>
+                  Enter the opening balance and actual cash
+                  counted to reconcile the day.
+                </p>
+              </div>
 
-              <label>
-                Opening Cash
-
-                <input
-                  type="number"
-                  min="0"
-                  value={openingCash}
-                  onChange={(e) =>
-                    setOpeningCash(e.target.value)
-                  }
-                />
-              </label>
-
-              <label>
-                Actual Cash Counted
-
-                <input
-                  type="number"
-                  min="0"
-                  value={actualCash}
-                  onChange={(e) =>
-                    setActualCash(e.target.value)
-                  }
-                  placeholder="Enter counted cash"
-                />
-              </label>
+              <div className="closing-secure-badge">
+                <ShieldCheck size={16} />
+                Secure Closing
+              </div>
             </div>
 
-            {/* ===============================================
+            {/* =================================================
+                CASH INPUTS
+            ================================================= */}
+
+            <div className="closing-form-grid">
+
+              <div className="closing-form-group">
+                <label htmlFor="openingCash">
+                  Opening Cash
+                </label>
+
+                <div className="closing-money-input">
+                  <span>{currency}</span>
+
+                  <input
+                    id="openingCash"
+                    type="number"
+                    min="0"
+                    value={openingCash}
+                    onChange={(e) =>
+                      setOpeningCash(e.target.value)
+                    }
+                  />
+                </div>
+
+                <small>
+                  Cash available at the start of the day.
+                </small>
+              </div>
+
+              <div className="closing-form-group">
+                <label htmlFor="actualCash">
+                  Actual Cash Counted
+                </label>
+
+                <div className="closing-money-input highlight">
+                  <span>{currency}</span>
+
+                  <input
+                    id="actualCash"
+                    type="number"
+                    min="0"
+                    value={actualCash}
+                    onChange={(e) =>
+                      setActualCash(e.target.value)
+                    }
+                    placeholder="0"
+                  />
+                </div>
+
+                <small>
+                  Physical cash counted at closing.
+                </small>
+              </div>
+
+            </div>
+
+            {/* =================================================
                 EXPECTED CASH
-            =============================================== */}
+            ================================================= */}
 
-            <p className="closing-line">
+            <div className="closing-calculation-box">
 
-              <span>
-                Expected Closing Cash
-              </span>
+              <div className="closing-calculation-row">
+                <div className="closing-calculation-label">
+                  <span>Opening Cash</span>
+                  <strong>
+                    {currency}{" "}
+                    {formatMoney(openingCash)}
+                  </strong>
+                </div>
 
-              <strong>
-                {currency}{" "}
-                {expectedCash.toLocaleString()}
-              </strong>
-            </p>
-
-            {/* ===============================================
-                DIFFERENCE
-            =============================================== */}
-
-            {difference !== null && (
-              <p
-                className={
-                  "closing-line closing-difference " +
-                  (
-                    difference > 0
-                      ? "excess"
-                      : difference < 0
-                      ? "shortage"
-                      : "balanced"
-                  )
-                }
-              >
-                <span>
-                  {difference > 0
-                    ? "Excess"
-                    : difference < 0
-                    ? "Shortage"
-                    : "Balanced"}
+                <span className="closing-calculation-symbol">
+                  +
                 </span>
 
-                <strong>
-                  {currency}{" "}
-                  {Math.abs(
-                    difference
-                  ).toLocaleString()}
-                </strong>
-              </p>
+                <div className="closing-calculation-label">
+                  <span>Cash Inflows</span>
+                  <strong>
+                    {currency}{" "}
+                    {formatMoney(
+                      Number(summary.cash_sales || 0) +
+                        Number(
+                          summary.customer_cash_payments ||
+                            0
+                        )
+                    )}
+                  </strong>
+                </div>
+
+                <span className="closing-calculation-symbol">
+                  −
+                </span>
+
+                <div className="closing-calculation-label">
+                  <span>Cash Outflows</span>
+                  <strong>
+                    {currency}{" "}
+                    {formatMoney(
+                      Number(summary.cash_expenses || 0) +
+                        Number(
+                          summary.supplier_cash_payments ||
+                            0
+                        )
+                    )}
+                  </strong>
+                </div>
+
+                <span className="closing-calculation-symbol">
+                  =
+                </span>
+
+                <div className="closing-expected-result">
+                  <span>Expected Cash</span>
+                  <strong>
+                    {currency}{" "}
+                    {formatMoney(expectedCash)}
+                  </strong>
+                </div>
+              </div>
+
+            </div>
+
+            {/* =================================================
+                DIFFERENCE
+            ================================================= */}
+
+            {difference !== null && (
+              <div
+                className={`closing-difference-box ${
+                  difference > 0
+                    ? "excess"
+                    : difference < 0
+                    ? "shortage"
+                    : "balanced"
+                }`}
+              >
+                <div className="closing-difference-icon">
+                  {difference > 0 ? (
+                    <TrendingUp size={21} />
+                  ) : difference < 0 ? (
+                    <TrendingDown size={21} />
+                  ) : (
+                    <CircleCheck size={21} />
+                  )}
+                </div>
+
+                <div className="closing-difference-content">
+                  <span>
+                    {difference > 0
+                      ? "Cash Excess"
+                      : difference < 0
+                      ? "Cash Shortage"
+                      : "Cash Balanced"}
+                  </span>
+
+                  <strong>
+                    {difference > 0
+                      ? "+"
+                      : difference < 0
+                      ? "-"
+                      : ""}{" "}
+                    {currency}{" "}
+                    {formatMoney(
+                      Math.abs(difference)
+                    )}
+                  </strong>
+                </div>
+
+                <p>
+                  {difference > 0
+                    ? "Actual cash is higher than the expected closing balance."
+                    : difference < 0
+                    ? "Actual cash is lower than the expected closing balance."
+                    : "Actual cash exactly matches the expected closing balance."}
+                </p>
+              </div>
             )}
 
-            {/* ===============================================
+            {/* =================================================
                 NOTES
-            =============================================== */}
+            ================================================= */}
 
-            <label className="closing-notes-label">
-
-              Notes (optional)
+            <div className="closing-notes-group">
+              <label htmlFor="closingNotes">
+                <FileText size={16} />
+                Notes
+                <span>Optional</span>
+              </label>
 
               <textarea
-                rows={2}
+                id="closingNotes"
+                rows={3}
                 value={notes}
                 onChange={(e) =>
                   setNotes(e.target.value)
                 }
-                placeholder="Any remarks about today's closing..."
+                placeholder="Add any remarks about today's closing..."
               />
-            </label>
+            </div>
 
-            {/* ===============================================
-                ACTION BUTTON
-            =============================================== */}
+            {/* =================================================
+                ACTIONS
+            ================================================= */}
 
             <div className="closing-actions">
 
+              <div className="closing-action-info">
+                <CircleCheck size={16} />
+
+                <span>
+                  {isClosed
+                    ? "This closing has already been recorded."
+                    : "Review the amounts before saving the daily closing."}
+                </span>
+              </div>
+
               {!isClosed ? (
                 <button
+                  className="closing-save-btn"
                   disabled={saving}
                   onClick={() =>
                     handleSave(false)
                   }
                 >
-                  {saving
-                    ? "Saving..."
-                    : "Save Daily Closing"}
+                  {saving ? (
+                    <>
+                      <RefreshCcw
+                        size={17}
+                        className="closing-spin"
+                      />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={17} />
+                      Save Daily Closing
+                    </>
+                  )}
                 </button>
               ) : (
                 <button
+                  className="closing-reopen-btn"
                   disabled={saving}
                   onClick={() =>
                     handleSave(true)
                   }
                 >
-                  {saving
-                    ? "Saving..."
-                    : "Reopen & Update Closing"}
+                  {saving ? (
+                    <>
+                      <RefreshCcw
+                        size={17}
+                        className="closing-spin"
+                      />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCcw size={17} />
+                      Reopen & Update Closing
+                    </>
+                  )}
                 </button>
               )}
 
             </div>
+
           </div>
         </>
       ) : null}
@@ -538,16 +937,47 @@ function DailyClosing() {
           RECENT CLOSINGS
       ===================================================== */}
 
-      <div className="closing-card">
+      <div className="closing-card closing-history-card">
 
-        <h3>Recent Closings</h3>
+        <div className="closing-history-header">
+          <div>
+            <div className="closing-card-title-row">
+              <div className="closing-section-icon slate">
+                <History size={18} />
+              </div>
+
+              <h3>Recent Closings</h3>
+            </div>
+
+            <p>
+              Review previously recorded daily cash closings.
+            </p>
+          </div>
+
+          <span className="closing-history-count">
+            {history.length}{" "}
+            {history.length === 1
+              ? "record"
+              : "records"}
+          </span>
+        </div>
 
         {history.length === 0 ? (
-          <p>No closings recorded yet.</p>
-        ) : (
-          <div className="table-wrapper">
+          <div className="closing-empty-history">
+            <div className="closing-empty-icon">
+              <History size={25} />
+            </div>
 
-            <table>
+            <strong>No closings recorded yet</strong>
+
+            <p>
+              Completed daily closings will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="closing-table-wrapper">
+
+            <table className="closing-table">
 
               <thead>
                 <tr>
@@ -563,79 +993,85 @@ function DailyClosing() {
               <tbody>
 
                 {history.map((row) => {
-
                   const rowDifference =
                     Number(row.difference || 0);
 
                   return (
                     <tr key={row.id}>
 
-                      {/* ===============================
-                          SAFE DATE
-                      =============================== */}
-
                       <td>
-                        {formatDate(
-                          row.closing_date
-                        )}
+                        <div className="closing-date-cell">
+                          <CalendarDays size={16} />
+
+                          <span>
+                            {formatDate(
+                              row.closing_date
+                            )}
+                          </span>
+                        </div>
                       </td>
 
-                      {/* ===============================
-                          OPENING
-                      =============================== */}
-
                       <td>
-                        {currency}{" "}
-                        {Number(
-                          row.opening_cash || 0
-                        ).toLocaleString()}
+                        <span className="closing-money-cell">
+                          {currency}{" "}
+                          {formatMoney(
+                            row.opening_cash
+                          )}
+                        </span>
                       </td>
 
-                      {/* ===============================
-                          EXPECTED
-                      =============================== */}
-
                       <td>
-                        {currency}{" "}
-                        {Number(
-                          row.expected_cash || 0
-                        ).toLocaleString()}
+                        <span className="closing-money-cell">
+                          {currency}{" "}
+                          {formatMoney(
+                            row.expected_cash
+                          )}
+                        </span>
                       </td>
 
-                      {/* ===============================
-                          ACTUAL
-                      =============================== */}
-
                       <td>
-                        {currency}{" "}
-                        {Number(
-                          row.actual_cash || 0
-                        ).toLocaleString()}
+                        <span className="closing-money-cell strong">
+                          {currency}{" "}
+                          {formatMoney(
+                            row.actual_cash
+                          )}
+                        </span>
                       </td>
 
-                      {/* ===============================
-                          DIFFERENCE
-                      =============================== */}
-
-                      <td
-                        className={
-                          rowDifference > 0
-                            ? "text-excess"
+                      <td>
+                        <span
+                          className={`closing-history-difference ${
+                            rowDifference > 0
+                              ? "excess"
+                              : rowDifference < 0
+                              ? "shortage"
+                              : "balanced"
+                          }`}
+                        >
+                          {rowDifference > 0
+                            ? "+"
                             : rowDifference < 0
-                            ? "text-shortage"
-                            : ""
-                        }
-                      >
-                        {currency}{" "}
-                        {rowDifference.toLocaleString()}
+                            ? "-"
+                            : ""}{" "}
+                          {currency}{" "}
+                          {formatMoney(
+                            Math.abs(rowDifference)
+                          )}
+                        </span>
                       </td>
 
-                      {/* ===============================
-                          CLOSED BY
-                      =============================== */}
-
                       <td>
-                        {row.closed_by || "-"}
+                        <div className="closing-user-cell">
+                          <div className="closing-user-avatar">
+                            {(row.closed_by || "U")
+                              .charAt(0)
+                              .toUpperCase()}
+                          </div>
+
+                          <span>
+                            {row.closed_by || "-"}
+                          </span>
+                        </div>
                       </td>
 
                     </tr>
@@ -645,9 +1081,11 @@ function DailyClosing() {
               </tbody>
 
             </table>
+
           </div>
         )}
       </div>
+
     </div>
   );
 }

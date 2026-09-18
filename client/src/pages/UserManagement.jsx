@@ -1,5 +1,24 @@
-import { useEffect, useState } from "react";
-import { Plus, KeyRound, Trash2, X, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Plus,
+  KeyRound,
+  Trash2,
+  X,
+  RefreshCw,
+  Users,
+  ShieldCheck,
+  UserCheck,
+  UserX,
+  LockKeyhole,
+  Search,
+  Shield,
+  UserRound,
+  Crown,
+  BriefcaseBusiness,
+  CircleCheck,
+  CircleAlert,
+} from "lucide-react";
+
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -25,6 +44,8 @@ function UserManagement() {
 
   const [actionLoading, setActionLoading] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState(null);
+
+  const [searchTerm, setSearchTerm] = useState("");
 
   // ===============================
   // LOAD USERS
@@ -220,271 +241,608 @@ function UserManagement() {
     setNewPassword("");
   };
 
+  // ===============================
+  // FILTER USERS
+  // ===============================
+  const filteredUsers = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    if (!query) {
+      return users;
+    }
+
+    return users.filter((user) => {
+      return (
+        String(user.id).toLowerCase().includes(query) ||
+        String(user.username || "")
+          .toLowerCase()
+          .includes(query) ||
+        String(user.role || "")
+          .toLowerCase()
+          .includes(query) ||
+        String(user.status || "active")
+          .toLowerCase()
+          .includes(query)
+      );
+    });
+  }, [users, searchTerm]);
+
+  // ===============================
+  // USER STATS
+  // ===============================
+  const totalUsers = users.length;
+
+  const activeUsers = users.filter(
+    (user) => (user.status || "active").toLowerCase() === "active"
+  ).length;
+
+  const inactiveUsers = users.filter(
+    (user) => (user.status || "active").toLowerCase() === "inactive"
+  ).length;
+
+  const adminUsers = users.filter(
+    (user) => user.role?.toLowerCase() === "admin"
+  ).length;
+
+  const managerUsers = users.filter(
+    (user) => user.role?.toLowerCase() === "manager"
+  ).length;
+
+  const cashierUsers = users.filter(
+    (user) => user.role?.toLowerCase() === "cashier"
+  ).length;
+
+  // ===============================
+  // ROLE ICON
+  // ===============================
+  const getRoleIcon = (userRole) => {
+    switch (userRole?.toLowerCase()) {
+      case "admin":
+        return Crown;
+
+      case "manager":
+        return BriefcaseBusiness;
+
+      case "cashier":
+        return UserRound;
+
+      default:
+        return Shield;
+    }
+  };
+
   return (
-    <div className="page-container">
+    <div className="users-page">
 
       {/* ===============================
-          HEADER
+          PAGE HEADER
       =============================== */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "25px",
-          gap: "15px",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
+      <div className="users-page-header">
+
+        <div className="users-header-content">
+
+          <div className="users-eyebrow">
+            <ShieldCheck size={15} />
+            <span>Security & Access Control</span>
+          </div>
+
           <h1>User Management</h1>
 
-          <p style={{ color: "#777", marginTop: "5px" }}>
-            Manage system users, passwords and access roles.
+          <p>
+            Manage system users, passwords, roles and access permissions.
           </p>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-          }}
-        >
+        <div className="users-header-actions">
+
           <button
             type="button"
+            className="users-refresh-btn"
             onClick={fetchUsers}
             disabled={loading}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "7px",
-            }}
           >
-            <RefreshCw size={17} />
+            <RefreshCw
+              size={17}
+              className={loading ? "users-spin" : ""}
+            />
             Refresh
           </button>
 
           <button
             type="button"
+            className="users-create-btn"
             onClick={() => {
               setMessage("");
               setError("");
               setShowCreateModal(true);
             }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "7px",
-            }}
           >
             <Plus size={18} />
             Create User
           </button>
+
         </div>
       </div>
 
       {/* ===============================
-          SUCCESS MESSAGE
+          ALERTS
       =============================== */}
       {message && (
-        <div
-          style={{
-            padding: "12px 15px",
-            marginBottom: "15px",
-            borderRadius: "8px",
-            background: "#e8f7ee",
-            color: "#176b36",
-          }}
-        >
-          {message}
+        <div className="users-alert users-alert-success">
+          <div className="users-alert-icon">
+            <CircleCheck size={19} />
+          </div>
+
+          <div>
+            <strong>Success</strong>
+            <p>{message}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMessage("")}
+            className="users-alert-close"
+          >
+            <X size={17} />
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="users-alert users-alert-error">
+          <div className="users-alert-icon">
+            <CircleAlert size={19} />
+          </div>
+
+          <div>
+            <strong>Action Failed</strong>
+            <p>{error}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setError("")}
+            className="users-alert-close"
+          >
+            <X size={17} />
+          </button>
         </div>
       )}
 
       {/* ===============================
-          ERROR MESSAGE
+          KPI CARDS
       =============================== */}
-      {error && (
-        <div
-          style={{
-            padding: "12px 15px",
-            marginBottom: "15px",
-            borderRadius: "8px",
-            background: "#fdeaea",
-            color: "#a52222",
-          }}
-        >
-          {error}
+      <div className="users-kpi-grid">
+
+        <div className="users-kpi-card blue">
+          <div className="users-kpi-top">
+            <div className="users-kpi-icon">
+              <Users size={21} />
+            </div>
+
+            <span className="users-kpi-label">
+              Total Users
+            </span>
+          </div>
+
+          <div className="users-kpi-value">
+            {totalUsers}
+          </div>
+
+          <div className="users-kpi-footer">
+            All system accounts
+          </div>
         </div>
-      )}
+
+        <div className="users-kpi-card green">
+          <div className="users-kpi-top">
+            <div className="users-kpi-icon">
+              <UserCheck size={21} />
+            </div>
+
+            <span className="users-kpi-label">
+              Active Users
+            </span>
+          </div>
+
+          <div className="users-kpi-value">
+            {activeUsers}
+          </div>
+
+          <div className="users-kpi-footer">
+            Currently active
+          </div>
+        </div>
+
+        <div className="users-kpi-card purple">
+          <div className="users-kpi-top">
+            <div className="users-kpi-icon">
+              <Shield size={21} />
+            </div>
+
+            <span className="users-kpi-label">
+              Admins
+            </span>
+          </div>
+
+          <div className="users-kpi-value">
+            {adminUsers}
+          </div>
+
+          <div className="users-kpi-footer">
+            Administrative access
+          </div>
+        </div>
+
+        <div className="users-kpi-card amber">
+          <div className="users-kpi-top">
+            <div className="users-kpi-icon">
+              <BriefcaseBusiness size={21} />
+            </div>
+
+            <span className="users-kpi-label">
+              Managers
+            </span>
+          </div>
+
+          <div className="users-kpi-value">
+            {managerUsers}
+          </div>
+
+          <div className="users-kpi-footer">
+            Management accounts
+          </div>
+        </div>
+
+        <div className="users-kpi-card slate">
+          <div className="users-kpi-top">
+            <div className="users-kpi-icon">
+              <UserRound size={21} />
+            </div>
+
+            <span className="users-kpi-label">
+              Cashiers
+            </span>
+          </div>
+
+          <div className="users-kpi-value">
+            {cashierUsers}
+          </div>
+
+          <div className="users-kpi-footer">
+            POS access accounts
+          </div>
+        </div>
+
+        <div className="users-kpi-card red">
+          <div className="users-kpi-top">
+            <div className="users-kpi-icon">
+              <UserX size={21} />
+            </div>
+
+            <span className="users-kpi-label">
+              Inactive
+            </span>
+          </div>
+
+          <div className="users-kpi-value">
+            {inactiveUsers}
+          </div>
+
+          <div className="users-kpi-footer">
+            Disabled accounts
+          </div>
+        </div>
+
+      </div>
 
       {/* ===============================
           USERS TABLE
       =============================== */}
-      <div className="table-container">
+      <div className="users-table-card">
 
-        {loading ? (
-          <p style={{ padding: "20px" }}>
-            Loading users...
-          </p>
-        ) : users.length === 0 ? (
-          <p style={{ padding: "20px" }}>
-            No users found.
-          </p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Username</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
+        <div className="users-table-header">
 
-            <tbody>
-              {users.map((user) => {
-                const isCurrentUser =
-                  Number(user.id) ===
-                  Number(currentUser?.id);
+          <div className="users-table-title">
 
-                return (
-                  <tr key={user.id}>
-                    <td>{user.id}</td>
+            <div className="users-section-icon">
+              <Users size={19} />
+            </div>
 
-                    <td>
-                      <strong>{user.username}</strong>
+            <div>
+              <h2>System Users</h2>
+              <p>
+                Manage accounts and security access
+              </p>
+            </div>
 
-                      {isCurrentUser && (
-                        <span
-                          style={{
-                            marginLeft: "8px",
-                            fontSize: "12px",
-                            color: "#666",
-                          }}
-                        >
-                          (You)
+          </div>
+
+          <span className="users-count-badge">
+            {filteredUsers.length}{" "}
+            {filteredUsers.length === 1 ? "User" : "Users"}
+          </span>
+
+        </div>
+
+        <div className="users-toolbar">
+
+          <div className="users-search">
+            <Search size={18} />
+
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) =>
+                setSearchTerm(e.target.value)
+              }
+              placeholder="Search username, role, status..."
+            />
+
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="users-search-clear"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          <div className="users-security-note">
+            <LockKeyhole size={16} />
+            <span>Protected user accounts</span>
+          </div>
+
+        </div>
+
+        <div className="users-table-wrapper">
+
+          {loading ? (
+            <div className="users-state-card">
+
+              <div className="users-loading-icon">
+                <RefreshCw size={25} />
+              </div>
+
+              <h3>Loading users...</h3>
+
+              <p>
+                Fetching system accounts and access information.
+              </p>
+
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="users-state-card">
+
+              <div className="users-empty-icon">
+                <Users size={27} />
+              </div>
+
+              <h3>
+                {searchTerm
+                  ? "No matching users"
+                  : "No users found"}
+              </h3>
+
+              <p>
+                {searchTerm
+                  ? "Try a different search term."
+                  : "Create your first system user to get started."}
+              </p>
+
+            </div>
+          ) : (
+            <table className="users-table">
+
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th className="users-actions-heading">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+
+                {filteredUsers.map((user) => {
+
+                  const isCurrentUser =
+                    Number(user.id) ===
+                    Number(currentUser?.id);
+
+                  const RoleIcon =
+                    getRoleIcon(user.role);
+
+                  const userStatus =
+                    user.status || "active";
+
+                  const isActive =
+                    userStatus.toLowerCase() === "active";
+
+                  return (
+                    <tr key={user.id}>
+
+                      <td>
+                        <span className="user-id">
+                          #{user.id}
                         </span>
-                      )}
-                    </td>
+                      </td>
 
-                    <td>
-                      <span
-                        style={{
-                          textTransform: "capitalize",
-                        }}
-                      >
-                        {user.role}
-                      </span>
-                    </td>
+                      <td>
 
-                    <td>
-                      <span
-                        style={{
-                          textTransform: "capitalize",
-                        }}
-                      >
-                        {user.status || "active"}
-                      </span>
-                    </td>
+                        <div className="user-name-cell">
 
-                    <td>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "8px",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        {/* RESET PASSWORD */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openResetModal(user)
-                          }
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "5px",
-                          }}
+                          <div className="user-avatar">
+                            <UserRound size={18} />
+                          </div>
+
+                          <div className="user-identity">
+
+                            <strong>
+                              {user.username}
+                            </strong>
+
+                            {isCurrentUser && (
+                              <span className="current-user-badge">
+                                <UserCheck size={12} />
+                                You
+                              </span>
+                            )}
+
+                          </div>
+
+                        </div>
+
+                      </td>
+
+                      <td>
+
+                        <span
+                          className={`user-role-badge ${(
+                            user.role || "cashier"
+                          ).toLowerCase()}`}
                         >
-                          <KeyRound size={16} />
-                          Reset Password
-                        </button>
+                          <RoleIcon size={14} />
 
-                        {/* DELETE USER */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleDeleteUser(user)
-                          }
-                          disabled={
-                            isCurrentUser ||
-                            deletingUserId === user.id
-                          }
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "5px",
-                            color: "#b42318",
-                            cursor:
+                          {user.role || "cashier"}
+                        </span>
+
+                      </td>
+
+                      <td>
+
+                        <span
+                          className={`user-status-pill ${
+                            isActive
+                              ? "active"
+                              : "inactive"
+                          }`}
+                        >
+                          <span className="user-status-dot" />
+
+                          {userStatus}
+                        </span>
+
+                      </td>
+
+                      <td>
+
+                        <div className="user-actions">
+
+                          <button
+                            type="button"
+                            className="user-action-btn reset"
+                            onClick={() =>
+                              openResetModal(user)
+                            }
+                            title="Reset password"
+                          >
+                            <KeyRound size={16} />
+                            <span>Reset Password</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="user-action-btn delete"
+                            onClick={() =>
+                              handleDeleteUser(user)
+                            }
+                            disabled={
+                              isCurrentUser ||
+                              deletingUserId === user.id
+                            }
+                            title={
                               isCurrentUser
-                                ? "not-allowed"
-                                : "pointer",
-                            opacity:
-                              isCurrentUser ? 0.5 : 1,
-                          }}
-                          title={
-                            isCurrentUser
-                              ? "You cannot delete your own account"
-                              : "Delete user"
-                          }
-                        >
-                          <Trash2 size={16} />
+                                ? "You cannot delete your own account"
+                                : "Delete user"
+                            }
+                          >
+                            <Trash2 size={16} />
 
-                          {deletingUserId === user.id
-                            ? "Deleting..."
-                            : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+                            <span>
+                              {deletingUserId === user.id
+                                ? "Deleting..."
+                                : "Delete"}
+                            </span>
+                          </button>
+
+                        </div>
+
+                      </td>
+
+                    </tr>
+                  );
+                })}
+
+              </tbody>
+
+            </table>
+          )}
+
+        </div>
+
       </div>
 
       {/* ===============================
           CREATE USER MODAL
       =============================== */}
       {showCreateModal && (
-        <div className="modal-overlay">
+        <div className="users-modal-overlay">
 
-          <div className="modal">
+          <div className="users-modal">
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <h2>Create User</h2>
+            <div className="users-modal-header">
+
+              <div className="users-modal-title">
+
+                <div className="users-modal-icon blue">
+                  <Plus size={20} />
+                </div>
+
+                <div>
+                  <h2>Create User</h2>
+                  <p>
+                    Add a new system account
+                  </p>
+                </div>
+
+              </div>
 
               <button
                 type="button"
+                className="users-modal-close"
                 onClick={closeCreateModal}
+                disabled={actionLoading}
               >
-                <X size={20} />
+                <X size={19} />
               </button>
+
             </div>
 
-            <form onSubmit={handleCreateUser}>
+            <div className="users-modal-security">
+              <ShieldCheck size={17} />
 
-              <div className="form-group">
-                <label>Username</label>
+              <span>
+                Create an account with the appropriate access role.
+              </span>
+            </div>
+
+            <form
+              onSubmit={handleCreateUser}
+              className="users-modal-form"
+            >
+
+              <div className="users-form-group">
+
+                <label>
+                  Username
+                </label>
 
                 <input
                   type="text"
@@ -494,11 +852,16 @@ function UserManagement() {
                   }
                   placeholder="Enter username"
                   disabled={actionLoading}
+                  autoComplete="off"
                 />
+
               </div>
 
-              <div className="form-group">
-                <label>Password</label>
+              <div className="users-form-group">
+
+                <label>
+                  Password
+                </label>
 
                 <input
                   type="password"
@@ -508,11 +871,20 @@ function UserManagement() {
                   }
                   placeholder="Minimum 6 characters"
                   disabled={actionLoading}
+                  autoComplete="new-password"
                 />
+
+                <span className="users-field-help">
+                  Password must contain at least 6 characters.
+                </span>
+
               </div>
 
-              <div className="form-group">
-                <label>Role</label>
+              <div className="users-form-group">
+
+                <label>
+                  Role
+                </label>
 
                 <select
                   value={role}
@@ -533,18 +905,34 @@ function UserManagement() {
                     Cashier
                   </option>
                 </select>
+
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: "10px",
-                  marginTop: "20px",
-                }}
-              >
+              <div className="users-role-info">
+
+                <div className="users-role-info-icon">
+                  <Shield size={17} />
+                </div>
+
+                <div>
+                  <strong>
+                    {role.charAt(0).toUpperCase() +
+                      role.slice(1)}{" "}
+                    access
+                  </strong>
+
+                  <p>
+                    User permissions are controlled by the selected role.
+                  </p>
+                </div>
+
+              </div>
+
+              <div className="users-modal-actions">
+
                 <button
                   type="button"
+                  className="users-cancel-btn"
                   onClick={closeCreateModal}
                   disabled={actionLoading}
                 >
@@ -553,16 +941,31 @@ function UserManagement() {
 
                 <button
                   type="submit"
+                  className="users-submit-btn"
                   disabled={actionLoading}
                 >
-                  {actionLoading
-                    ? "Creating..."
-                    : "Create User"}
+                  {actionLoading ? (
+                    <>
+                      <RefreshCw
+                        size={17}
+                        className="users-spin"
+                      />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={17} />
+                      Create User
+                    </>
+                  )}
                 </button>
+
               </div>
 
             </form>
+
           </div>
+
         </div>
       )}
 
@@ -570,38 +973,71 @@ function UserManagement() {
           RESET PASSWORD MODAL
       =============================== */}
       {showResetModal && selectedUser && (
-        <div className="modal-overlay">
+        <div className="users-modal-overlay">
 
-          <div className="modal">
+          <div className="users-modal">
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <h2>Reset Password</h2>
+            <div className="users-modal-header">
+
+              <div className="users-modal-title">
+
+                <div className="users-modal-icon amber">
+                  <KeyRound size={20} />
+                </div>
+
+                <div>
+                  <h2>Reset Password</h2>
+                  <p>
+                    Update account password
+                  </p>
+                </div>
+
+              </div>
 
               <button
                 type="button"
+                className="users-modal-close"
                 onClick={closeResetModal}
+                disabled={actionLoading}
               >
-                <X size={20} />
+                <X size={19} />
               </button>
+
             </div>
 
-            <p style={{ marginBottom: "15px" }}>
-              Reset password for{" "}
-              <strong>
-                {selectedUser.username}
-              </strong>
-            </p>
+            <div className="users-reset-user">
 
-            <form onSubmit={handleResetPassword}>
+              <div className="users-reset-avatar">
+                <UserRound size={19} />
+              </div>
 
-              <div className="form-group">
-                <label>New Password</label>
+              <div>
+                <span>Resetting password for</span>
+                <strong>
+                  {selectedUser.username}
+                </strong>
+              </div>
+
+            </div>
+
+            <div className="users-modal-security warning">
+              <LockKeyhole size={17} />
+
+              <span>
+                The new password must contain at least 6 characters.
+              </span>
+            </div>
+
+            <form
+              onSubmit={handleResetPassword}
+              className="users-modal-form"
+            >
+
+              <div className="users-form-group">
+
+                <label>
+                  New Password
+                </label>
 
                 <input
                   type="password"
@@ -611,19 +1047,17 @@ function UserManagement() {
                   }
                   placeholder="Minimum 6 characters"
                   disabled={actionLoading}
+                  autoComplete="new-password"
+                  autoFocus
                 />
+
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: "10px",
-                  marginTop: "20px",
-                }}
-              >
+              <div className="users-modal-actions">
+
                 <button
                   type="button"
+                  className="users-cancel-btn"
                   onClick={closeResetModal}
                   disabled={actionLoading}
                 >
@@ -632,18 +1066,34 @@ function UserManagement() {
 
                 <button
                   type="submit"
+                  className="users-submit-btn reset"
                   disabled={actionLoading}
                 >
-                  {actionLoading
-                    ? "Resetting..."
-                    : "Reset Password"}
+                  {actionLoading ? (
+                    <>
+                      <RefreshCw
+                        size={17}
+                        className="users-spin"
+                      />
+                      Resetting...
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound size={17} />
+                      Reset Password
+                    </>
+                  )}
                 </button>
+
               </div>
 
             </form>
+
           </div>
+
         </div>
       )}
+
     </div>
   );
 }
